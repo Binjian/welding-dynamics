@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 welding-sim = "welding_dynamics.main:main"
+welding-sim-vi = "welding_dynamics.main_vi:main"
 
 [build-system]
 requires = ["hatchling"]

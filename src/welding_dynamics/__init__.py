@@ -3,7 +3,13 @@ from .gmaw import GMAWDynamics
 from .thermal import RosenthalThermal, GoldakFDM
 from .droplet import DropletDynamics
 from .short_circuit import ShortCircuitGMAW
+from .variational import ForcedVerlet, MidpointDEL
+from .droplet_vi import DropletOscillatorVI
+from .robot_vi import TwoLinkArm
+from .shortcircuit_vi import ContactCycleVI
 
 __version__ = "1.0.0"
 __all__ = ["GMAWDynamics", "RosenthalThermal", "GoldakFDM",
-           "DropletDynamics", "ShortCircuitGMAW"]
+           "DropletDynamics", "ShortCircuitGMAW",
+           "ForcedVerlet", "MidpointDEL", "DropletOscillatorVI",
+           "TwoLinkArm", "ContactCycleVI"]

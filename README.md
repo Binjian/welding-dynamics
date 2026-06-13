@@ -96,3 +96,31 @@ welding-dynamics/
 - Rosenthal, D. (1946). The theory of moving sources of heat.
 - Goldak, J. et al. (1984). A new finite element model for welding heat sources.
 - 静力平衡理论 (SFBT) 与燃弧 (burn-off) 模型经典文献 (Lesnewich; Amson; Quinn et al.)
+
+## 变分积分器扩展 (模块 6–8)
+
+```bash
+uv run welding-sim-vi   # 运行变分扩展, 图片输出至 ./results/
+```
+
+核心库 `variational.py`：`ForcedVerlet`（辛 Verlet + 离散
+Lagrange–d'Alembert 强迫项）、`MidpointDEL`（中点离散 Euler–Lagrange，
+支持构型相关质量矩阵，Newton 隐式求解）、非光滑碰撞映射工具。
+
+### 模块 6 — 熔滴振荡 / 脉冲 MIG 共振 (`droplet_vi.py`)
+悬垂熔滴 Rayleigh l=2 模态 (k = 32πγ/3, f0 ≈ 527 Hz)，方波脉冲电磁力
+激励。结果：变分积分器以粗步长 (T0/22) 精确复现解析共振峰；
+隐式 Euler 的人工数值阻尼把共振峰压低 87% 并使峰频偏移 —— 用于
+脉冲参数整定时会严重误导"一脉一滴"频率匹配。
+
+### 模块 7 — 焊接机器人二连杆 (`robot_vi.py`)
+竖直平面二连杆 (构型相关 M(q))，MidpointDEL 积分。
+200 s 无驱动摆动 (h=20 ms)：VI 能量误差有界振荡（末段 ~0.8%），
+RK4 同步长单调漂移至 ~35% —— 长轨迹仿真不失真是变分积分器的
+标志性优势。焊缝跟踪演示（PD+重力补偿、强迫 DEL）RMS 误差 0.24 mm。
+
+### 模块 8 — 短路接触的非光滑变分模型 (`shortcircuit_vi.py`)
+CMT 机械振荡循环：自由相辛 Verlet + 触池事件二分精确定位 +
+变分碰撞映射 (湿接触 e=0) + 附着/回抽/断桥状态机，复现 ~80 Hz
+熔滴过渡节律。弹性反冲基准 (e=0.85)：非光滑 VI 能量只在物理事件处
+阶梯下降；罚函数法在同步长下因接触刚度欠解析产生巨量虚假能量注入。
