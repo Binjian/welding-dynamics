@@ -184,25 +184,25 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 其中显式包含 `trame-vtk` 与 `trame-vuetify`，否则 PyVista 会在导入
 `trame.widgets.vtk` 时失败。
 
-## Marangoni 扩展候选
+## Marangoni 扩展候选 (模块 10)
 
-### 模块 9A — 有效热扩散修正 (`marangoni.py`)
+### 模块 10A — 有效热扩散修正 (`marangoni.py`)
 `EffectiveMarangoniCorrection` 用表面张力温度系数 `dγ/dT` 与表面温度梯度
 估计 Marangoni 数、Peclet 数和表面速度尺度，并将熔池内热扩散率修正为
 `α_eff`。该模型是轻量级后处理/参数化修正，不求解速度场；`dγ/dT < 0`
 时给出外向表面流导致的加宽/变浅趋势，`dγ/dT > 0` 时给出内向表面流导致的
 变窄/加深趋势。
 
-### 模块 9B — 2D 表面热毛细回流 (`marangoni.py`)
+### 模块 10B — 2D 表面热毛细回流 (`marangoni.py`)
 `SurfaceMarangoniFlow2D` 从表面温度梯度计算 `τ_s = (dγ/dT)∇_sT`，
 生成受限速的二维表面回流速度场，并提供显式
 `advect_diffuse_step()` 将速度场耦合到表面温度片的对流-扩散更新。
 该模型比有效扩散修正更接近 Marangoni 流机理，但仍避免完整自由表面
 Navier-Stokes 求解，适合作为 Goldak 顶面温度场的中等复杂度后处理或弱耦合项。
 
-### 模块 9C — 不可压热毛细熔池流 (`marangoni.py`)
+### 模块 10C — 不可压热毛细熔池流 (`marangoni.py`)
 `IncompressibleMarangoniFlow2D` 在焊缝纵向-深度截面上求解
 流函数-涡量形式的不可压流原型：自由表面施加
 `μ ∂u/∂z = (dγ/dT)∂T/∂x`，内部进行粘性涡量扩散，并用速度场对温度执行
-对流-扩散更新。它比 9A/9B 更接近真实 Marangoni 熔池对流，但仍是透明的
+对流-扩散更新。它比 10A/10B 更接近真实 Marangoni 熔池对流，但仍是透明的
 二维研究原型，而不是完整三维自由表面 CFD。
