@@ -183,3 +183,12 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 若使用 `pv.set_jupyter_backend('trame')`，需确保已安装 `notebook` extra，
 其中显式包含 `trame-vtk` 与 `trame-vuetify`，否则 PyVista 会在导入
 `trame.widgets.vtk` 时失败。
+
+## Marangoni 扩展候选
+
+### 模块 9B — 2D 表面热毛细回流 (`marangoni.py`)
+`SurfaceMarangoniFlow2D` 从表面温度梯度计算 `τ_s = (dγ/dT)∇_sT`，
+生成受限速的二维表面回流速度场，并提供显式
+`advect_diffuse_step()` 将速度场耦合到表面温度片的对流-扩散更新。
+该模型比有效扩散修正更接近 Marangoni 流机理，但仍避免完整自由表面
+Navier-Stokes 求解，适合作为 Goldak 顶面温度场的中等复杂度后处理或弱耦合项。
