@@ -183,3 +183,12 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 若使用 `pv.set_jupyter_backend('trame')`，需确保已安装 `notebook` extra，
 其中显式包含 `trame-vtk` 与 `trame-vuetify`，否则 PyVista 会在导入
 `trame.widgets.vtk` 时失败。
+
+## Marangoni 扩展候选
+
+### 模块 9A — 有效热扩散修正 (`marangoni.py`)
+`EffectiveMarangoniCorrection` 用表面张力温度系数 `dγ/dT` 与表面温度梯度
+估计 Marangoni 数、Peclet 数和表面速度尺度，并将熔池内热扩散率修正为
+`α_eff`。该模型是轻量级后处理/参数化修正，不求解速度场；`dγ/dT < 0`
+时给出外向表面流导致的加宽/变浅趋势，`dγ/dT > 0` 时给出内向表面流导致的
+变窄/加深趋势。
