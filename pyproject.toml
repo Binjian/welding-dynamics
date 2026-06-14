@@ -11,9 +11,15 @@ dependencies = [
     "matplotlib>=3.8",
 ]
 
+[project.optional-dependencies]
+# 3D 体渲染 (模块 9 Mayavi)。安装较重(VTK/Qt): `uv sync --extra viz`。
+# OpenFOAM 导出本身仅依赖 numpy, 不需要本组。
+viz = ["mayavi>=4.8"]
+
 [project.scripts]
 welding-sim = "welding_dynamics.main:main"
 welding-sim-vi = "welding_dynamics.main_vi:main"
+welding-sim-3d = "welding_dynamics.main_3d:main"
 
 [build-system]
 requires = ["hatchling"]

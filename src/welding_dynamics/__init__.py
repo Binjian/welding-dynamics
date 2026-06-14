@@ -7,9 +7,11 @@ from .variational import ForcedVerlet, MidpointDEL
 from .droplet_vi import DropletOscillatorVI
 from .robot_vi import TwoLinkArm
 from .shortcircuit_vi import ContactCycleVI
+from .thermal3d import OpenFOAMExporter, export_openfoam, render
 
 __version__ = "1.0.0"
 __all__ = ["GMAWDynamics", "RosenthalThermal", "GoldakFDM",
            "DropletDynamics", "ShortCircuitGMAW",
            "ForcedVerlet", "MidpointDEL", "DropletOscillatorVI",
-           "TwoLinkArm", "ContactCycleVI"]
+           "TwoLinkArm", "ContactCycleVI",
+           "OpenFOAMExporter", "export_openfoam", "render"]

@@ -124,3 +124,49 @@ CMT 机械振荡循环：自由相辛 Verlet + 触池事件二分精确定位 +
 变分碰撞映射 (湿接触 e=0) + 附着/回抽/断桥状态机，复现 ~80 Hz
 熔滴过渡节律。弹性反冲基准 (e=0.85)：非光滑 VI 能量只在物理事件处
 阶梯下降；罚函数法在同步长下因接触刚度欠解析产生巨量虚假能量注入。
+
+## 三维体渲染 + OpenFOAM 导出 (模块 9)
+
+```bash
+uv sync --extra viz   # 安装可选依赖 mayavi (较重: VTK/Qt)
+uv run welding-sim-3d  # 求解 GoldakFDM -> 导出 OpenFOAM 算例 -> Mayavi 截图
+```
+
+`thermal3d.py` 在模块 4 `GoldakFDM` 三维温度场基础上提供两件事：
+
+### OpenFOAM 算例导出 (`OpenFOAMExporter`, 纯 numpy)
+把 FDM 结构化网格手工写成完整 `polyMesh`（points / faces / owner /
+neighbour / boundary，内部面按上三角排序），并将 **末时刻温度场 `T`** 与
+**峰值温度场 `Tpeak`** 写成 `volScalarField` 时间目录。半对称面 (y=0) 输出为
+`symmetryPlane` patch，另含可直接 `laplacianFoam` 复算的 `system/`、`constant/`。
+目录内放置 `case.foam` 占位文件，在 **ParaView 中可直接打开**：
+
+```
+results/openfoam_case/
+├── case.foam                 # ParaView 入口
+├── constant/polyMesh/        # points faces owner neighbour boundary
+├── constant/transportProperties
+├── 0/T                       # 初始场 (均匀 T0)
+├── 5/{T,Tpeak}               # 末时刻温度场 / 峰值温度场
+└── system/{controlDict,fvSchemes,fvSolution}
+```
+
+```python
+from welding_dynamics import GoldakFDM, export_openfoam
+g = GoldakFDM(); g.run(t_end=5.0)
+export_openfoam(g, "results/openfoam_case", t_end=5.0)
+```
+
+导出网格经封闭性校验（每个单元各面面积矢量之和 ≈ 0），保证面定向与
+owner/neighbour 关系正确（无需安装 OpenFOAM 即可验证）。
+
+### Mayavi 体渲染 (`render`)
+将半模型沿 y=0 镜像为全熔池，绘制熔合区 (熔点) 与 HAZ 等温面 + 对称面温度切片。
+`mayavi` 为**可选依赖**，在 `render()` 内延迟导入；未安装时导出功能不受影响，
+CLI 自动跳过渲染。
+
+```python
+from welding_dynamics import GoldakFDM, render
+g = GoldakFDM(); g.run(t_end=5.0)
+render(g, field="peak")          # 交互式窗口; offscreen=True 可离屏存图
+```

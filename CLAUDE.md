@@ -12,8 +12,10 @@ Note: the README and most code comments/docstrings are in Chinese. Match that co
 
 ```bash
 uv sync             # create .venv and install deps (numpy, scipy, matplotlib)
+uv sync --extra viz # additionally install mayavi (heavy: VTK/Qt) for module 9 rendering
 uv run welding-sim      # run modules 1–5, writes plots to ./results/
 uv run welding-sim-vi   # run variational modules 6–8, writes plots to ./results/
+uv run welding-sim-3d   # module 9: solve GoldakFDM, export OpenFOAM case, Mayavi render
 ```
 
 There is **no test suite, linter, or formatter configured.** Validation is done by running the two CLIs and inspecting the printed steady-state numbers (compared against the reference table in README.md) and the regenerated `results/*.png`. When changing physics, run the relevant CLI and confirm the printed values still match the README's "典型结果" table.
@@ -43,6 +45,10 @@ Two distinct simulation families, two entry points:
 - `shortcircuit_vi.py` — `ContactCycleVI`: nonsmooth contact model of the CMT mechanical cycle (event-bisection + variational collision map + attach/retract/rupture state machine).
 
 The central technical claim the VI modules demonstrate: symplectic/variational integrators keep energy error bounded over long trajectories where RK4 / implicit-Euler drift or add artificial damping. Preserve that property when touching `variational.py` (don't substitute a non-symplectic step).
+
+**Module 9 (`main_3d.py` → `welding-sim-3d`):** 3D post-processing of the `GoldakFDM` field, in `thermal3d.py`.
+- `OpenFOAMExporter` (pure numpy, no mayavi) — writes the FDM structured grid as a hand-built OpenFOAM `polyMesh` (points/faces/owner/neighbour/boundary, upper-triangular face ordering, half-symmetry `symmetryPlane` patch at y=0) plus `T`/`Tpeak` as `volScalarField` time directories and a minimal runnable `laplacianFoam` `system/`+`constant/`. Cell↔array mapping is `field.ravel(order="F")` for the `[i,j,k]` array (cell index `i + Nx*(j + Ny*k)`). Drops a `case.foam` stub so the case opens directly in ParaView. **If you change the mesh writer, re-validate closedness** — every cell's summed face-area vectors must be ~0 (this is what catches a wrong point ordering or owner/neighbour flip); there is no OpenFOAM install to run `checkMesh`.
+- `render()` — Mayavi (`mlab`) volumetric view: mirrors the half-model across y=0, draws melt/HAZ iso-surfaces + a symmetry-plane slice. **mayavi is an optional dependency** (`[project.optional-dependencies] viz`), lazy-imported inside `render()`; the exporter and the rest of the package work without it. The CLI degrades gracefully (prints and continues) when mayavi is absent or offscreen rendering fails headless.
 
 `docs/legacy/` holds early single-file prototypes (`v0_*`, `v1_*`) kept for reference only — not imported by the package.
 
