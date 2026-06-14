@@ -183,3 +183,12 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 若使用 `pv.set_jupyter_backend('trame')`，需确保已安装 `notebook` extra，
 其中显式包含 `trame-vtk` 与 `trame-vuetify`，否则 PyVista 会在导入
 `trame.widgets.vtk` 时失败。
+
+## Marangoni 扩展候选
+
+### 模块 9C — 不可压热毛细熔池流 (`marangoni.py`)
+`IncompressibleMarangoniFlow2D` 在焊缝纵向-深度截面上求解
+流函数-涡量形式的不可压流原型：自由表面施加
+`μ ∂u/∂z = (dγ/dT)∂T/∂x`，内部进行粘性涡量扩散，并用速度场对温度执行
+对流-扩散更新。它比 9A/9B 更接近真实 Marangoni 熔池对流，但仍是透明的
+二维研究原型，而不是完整三维自由表面 CFD。
