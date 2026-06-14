@@ -199,3 +199,10 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 `advect_diffuse_step()` 将速度场耦合到表面温度片的对流-扩散更新。
 该模型比有效扩散修正更接近 Marangoni 流机理，但仍避免完整自由表面
 Navier-Stokes 求解，适合作为 Goldak 顶面温度场的中等复杂度后处理或弱耦合项。
+
+### 模块 9C — 不可压热毛细熔池流 (`marangoni.py`)
+`IncompressibleMarangoniFlow2D` 在焊缝纵向-深度截面上求解
+流函数-涡量形式的不可压流原型：自由表面施加
+`μ ∂u/∂z = (dγ/dT)∂T/∂x`，内部进行粘性涡量扩散，并用速度场对温度执行
+对流-扩散更新。它比 9A/9B 更接近真实 Marangoni 熔池对流，但仍是透明的
+二维研究原型，而不是完整三维自由表面 CFD。

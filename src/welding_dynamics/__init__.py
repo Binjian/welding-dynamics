@@ -3,7 +3,8 @@ from .gmaw import GMAWDynamics
 from .thermal import RosenthalThermal, GoldakFDM
 from .droplet import DropletDynamics
 from .short_circuit import ShortCircuitGMAW
-from .marangoni import EffectiveMarangoniCorrection, SurfaceMarangoniFlow2D
+from .marangoni import (EffectiveMarangoniCorrection, SurfaceMarangoniFlow2D,
+                        IncompressibleMarangoniFlow2D)
 from .variational import ForcedVerlet, MidpointDEL
 from .droplet_vi import DropletOscillatorVI
 from .robot_vi import TwoLinkArm
@@ -14,6 +15,7 @@ __version__ = "1.0.0"
 __all__ = ["GMAWDynamics", "RosenthalThermal", "GoldakFDM",
            "DropletDynamics", "ShortCircuitGMAW",
            "EffectiveMarangoniCorrection", "SurfaceMarangoniFlow2D",
+           "IncompressibleMarangoniFlow2D",
            "ForcedVerlet", "MidpointDEL", "DropletOscillatorVI",
            "TwoLinkArm", "ContactCycleVI",
            "OpenFOAMExporter", "export_openfoam", "render"]
