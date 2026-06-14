@@ -275,8 +275,9 @@ def render(fdm, field="peak", outfile=None, offscreen=False,
 
     field: "peak" 峰值温度场(熔合区+HAZ) 或 "final" 末时刻温度场。
     offscreen=True 时离屏渲染并保存 outfile (需要 VTK 离屏支持/xvfb)。
-    notebook=True 时调用 plotter.show(backend="trame") 并返回 trame viewer,
-        供 Jupyter 内联交互显示 (直接返回 Plotter 不会渲染)。
+    notebook=True 时调用 plotter.show(backend="html") 并返回内联 viewer 控件
+        (自包含 vtk.js, 不依赖 trame 服务器), 供 Jupyter 内联显示;
+        直接返回 Plotter 不会渲染。
     backend: "auto" 或 "pyvista"; 旧 Mayavi 用户可传 "mayavi"。
     需要可选依赖 pyvista: `uv sync --extra viz` (交互式 notebook: `--extra notebook`)。
     """
@@ -321,7 +322,8 @@ def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
     haz_surface = grid.contour([float(haz)], scalars="T")
     mid_slice = grid.slice(normal="y", origin=(0.0, 0.0, 0.0))
 
-    plotter = pv.Plotter(off_screen=bool(offscreen), window_size=size)
+    plotter = pv.Plotter(off_screen=bool(offscreen), notebook=notebook,
+                         window_size=size)
     plotter.set_background("white")
     if melt.n_points:
         plotter.add_mesh(melt, color=(0.85, 0.1, 0.1), opacity=0.55,
@@ -348,9 +350,10 @@ def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
         Path(outfile).parent.mkdir(parents=True, exist_ok=True)
         plotter.screenshot(str(outfile))
     if notebook:
-        # 返回 trame viewer (具备 rich repr) 才能在 Jupyter 内联渲染;
-        # 直接返回 Plotter 不会显示 (Plotter 无 _repr_html_, 只打印对象 repr)。
-        return plotter.show(jupyter_backend="trame", return_viewer=True)
+        # 必须返回 viewer 控件 (具备 rich repr) 才会内联渲染; 直接返回 Plotter
+        # 只会打印 <...Plotter...>。'html' = 自包含 vtk.js 控件 (ipywidgets),
+        # 不依赖 trame 服务器/iframe, 在受限 JupyterLab 下最稳健, 可旋转/缩放。
+        return plotter.show(jupyter_backend="html", return_viewer=True)
     if not offscreen:
         plotter.show()
     else:
