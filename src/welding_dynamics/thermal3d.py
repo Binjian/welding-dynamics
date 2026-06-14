@@ -275,7 +275,8 @@ def render(fdm, field="peak", outfile=None, offscreen=False,
 
     field: "peak" 峰值温度场(熔合区+HAZ) 或 "final" 末时刻温度场。
     offscreen=True 时离屏渲染并保存 outfile (需要 VTK 离屏支持/xvfb)。
-    notebook=True 时返回 PyVista Plotter, 供 Jupyter 内联交互显示。
+    notebook=True 时调用 plotter.show(backend="trame") 并返回 trame viewer,
+        供 Jupyter 内联交互显示 (直接返回 Plotter 不会渲染)。
     backend: "auto" 或 "pyvista"; 旧 Mayavi 用户可传 "mayavi"。
     需要可选依赖 pyvista: `uv sync --extra viz` (交互式 notebook: `--extra notebook`)。
     """
@@ -347,7 +348,9 @@ def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
         Path(outfile).parent.mkdir(parents=True, exist_ok=True)
         plotter.screenshot(str(outfile))
     if notebook:
-        return plotter
+        # 返回 trame viewer (具备 rich repr) 才能在 Jupyter 内联渲染;
+        # 直接返回 Plotter 不会显示 (Plotter 无 _repr_html_, 只打印对象 repr)。
+        return plotter.show(jupyter_backend="trame", return_viewer=True)
     if not offscreen:
         plotter.show()
     else:
