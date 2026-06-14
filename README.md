@@ -192,3 +192,10 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 `α_eff`。该模型是轻量级后处理/参数化修正，不求解速度场；`dγ/dT < 0`
 时给出外向表面流导致的加宽/变浅趋势，`dγ/dT > 0` 时给出内向表面流导致的
 变窄/加深趋势。
+
+### 模块 9B — 2D 表面热毛细回流 (`marangoni.py`)
+`SurfaceMarangoniFlow2D` 从表面温度梯度计算 `τ_s = (dγ/dT)∇_sT`，
+生成受限速的二维表面回流速度场，并提供显式
+`advect_diffuse_step()` 将速度场耦合到表面温度片的对流-扩散更新。
+该模型比有效扩散修正更接近 Marangoni 流机理，但仍避免完整自由表面
+Navier-Stokes 求解，适合作为 Goldak 顶面温度场的中等复杂度后处理或弱耦合项。
