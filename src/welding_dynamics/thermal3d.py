@@ -270,12 +270,14 @@ def export_openfoam(fdm, case_dir="results/openfoam_case", t_end=5.0):
 # Mayavi 体渲染 (可选依赖, 延迟导入)
 # ----------------------------------------------------------------------------
 def render(fdm, field="peak", outfile=None, offscreen=False,
-           size=(1000, 700)):
+           notebook=False, size=(1000, 700)):
     """用 Mayavi 渲染熔池/HAZ 等温面。
 
     field: "peak" 峰值温度场(熔合区+HAZ) 或 "final" 末时刻温度场。
     offscreen=True 时离屏渲染并保存 outfile (需要 VTK 离屏支持/xvfb)。
-    需要可选依赖 mayavi: `uv sync --extra viz`。
+    notebook=True 时返回 figure 供 Jupyter 内联交互显示 (调用前需先执行
+        `from mayavi import mlab; mlab.init_notebook()`), 不弹出 GUI 窗口。
+    需要可选依赖 mayavi: `uv sync --extra viz` (交互式 notebook: `--extra notebook`)。
     """
     try:
         from mayavi import mlab
@@ -320,6 +322,8 @@ def render(fdm, field="peak", outfile=None, offscreen=False,
     if outfile:
         Path(outfile).parent.mkdir(parents=True, exist_ok=True)
         mlab.savefig(str(outfile), magnification=1)
+    if notebook:
+        return fig          # Jupyter 内联交互显示 (init_notebook 已注册显示钩子)
     if not offscreen:
         mlab.show()
     else:

@@ -170,3 +170,12 @@ from welding_dynamics import GoldakFDM, render
 g = GoldakFDM(); g.run(t_end=5.0)
 render(g, field="peak")          # 交互式窗口; offscreen=True 可离屏存图
 ```
+
+#### Jupyter 交互式演示
+`notebooks/mayavi_interactive_demo.ipynb` 演示在 Jupyter 中内联交互旋转/缩放
+三维温度场 (`render(g, notebook=True)`, 需先 `mlab.init_notebook()`)：
+
+```bash
+uv sync --extra notebook   # mayavi + jupyter + 交互后端依赖
+uv run jupyter lab notebooks/mayavi_interactive_demo.ipynb
+```
