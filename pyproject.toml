@@ -9,6 +9,10 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "matplotlib>=3.8",
+    "trame>=3.13.2",
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "vtk>=9.3.1",
 ]
 
 [project.optional-dependencies]
@@ -18,11 +22,13 @@ viz = [
     "pyvista>=0.44",
 ]
 # Jupyter 交互式体渲染演示 (notebooks/pyvista_interactive_demo.ipynb)。
-# PyVista 的 notebook 后端由 trame/jupyter 依赖提供。
+# PyVista 的 trame notebook 后端还需要 trame-vtk / trame-vuetify。
 notebook = [
     "pyvista[jupyter]>=0.44",
     "jupyter>=1.0",
     "ipywidgets>=8.0",
+    "trame-vtk>=2.8.15",
+    "trame-vuetify>=2.9.0",
 ]
 
 [project.scripts]

@@ -3778,12 +3778,16 @@ name = "welding-dynamics"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "ipykernel" },
+    { name = "jupyter" },
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "trame" },
+    { name = "vtk" },
 ]
 
 [package.optional-dependencies]
@@ -3791,6 +3795,8 @@ notebook = [
     { name = "ipywidgets" },
     { name = "jupyter" },
     { name = "pyvista", extra = ["jupyter"] },
+    { name = "trame-vtk" },
+    { name = "trame-vuetify" },
 ]
 viz = [
     { name = "pyvista" },
@@ -3798,13 +3804,19 @@ viz = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.0" },
+    { name = "jupyter", specifier = ">=1.1.1" },
     { name = "jupyter", marker = "extra == 'notebook'", specifier = ">=1.0" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pyvista", marker = "extra == 'viz'", specifier = ">=0.44" },
     { name = "pyvista", extras = ["jupyter"], marker = "extra == 'notebook'", specifier = ">=0.44" },
     { name = "scipy", specifier = ">=1.11" },
+    { name = "trame", specifier = ">=3.13.2" },
+    { name = "trame-vtk", marker = "extra == 'notebook'", specifier = ">=2.8.15" },
+    { name = "trame-vuetify", marker = "extra == 'notebook'", specifier = ">=2.9.0" },
+    { name = "vtk", specifier = ">=9.3.1" },
 ]
 provides-extras = ["viz", "notebook"]
 
