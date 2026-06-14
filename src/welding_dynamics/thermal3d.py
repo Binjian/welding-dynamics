@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""模块 9: GoldakFDM 三维场的 Mayavi 体渲染 与 OpenFOAM 算例导出
+"""模块 9: GoldakFDM 三维场的 PyVista 体渲染 与 OpenFOAM 算例导出
 
 - OpenFOAMExporter: 把 GoldakFDM 的结构化网格 + 温度场写成完整 OpenFOAM 算例
   (constant/polyMesh 六面体网格 + 0/ 与时间目录下的 T/Tpeak volScalarField)。
   生成 case.foam 占位文件, 可在 ParaView 中直接打开。半对称用 symmetryPlane patch。
-- render: Mayavi (mlab) 体渲染, 将半模型沿 y=0 镜像为全熔池, 画熔合线/HAZ 等温面。
-  mayavi 为可选依赖, 延迟导入 (uv sync --extra viz)。
+- render: PyVista 体渲染, 将半模型沿 y=0 镜像为全熔池, 画熔合线/HAZ 等温面。
+  pyvista 为可选依赖, 延迟导入 (uv sync --extra viz)。
 """
 from pathlib import Path
 import numpy as np
 
 
 # ----------------------------------------------------------------------------
-# OpenFOAM 导出 (纯 numpy, 无需 mayavi)
+# OpenFOAM 导出 (纯 numpy, 无需可视化依赖)
 # ----------------------------------------------------------------------------
 def _foam_header(cls, obj, loc, note=None):
     note_line = f'    note        "{note}";\n' if note else ""
@@ -267,34 +267,107 @@ def export_openfoam(fdm, case_dir="results/openfoam_case", t_end=5.0):
 
 
 # ----------------------------------------------------------------------------
-# Mayavi 体渲染 (可选依赖, 延迟导入)
+# 体渲染 (可选依赖, 延迟导入)
 # ----------------------------------------------------------------------------
 def render(fdm, field="peak", outfile=None, offscreen=False,
-           notebook=False, size=(1000, 700)):
-    """用 Mayavi 渲染熔池/HAZ 等温面。
+           notebook=False, size=(1000, 700), backend="auto"):
+    """渲染熔池/HAZ 等温面。
 
     field: "peak" 峰值温度场(熔合区+HAZ) 或 "final" 末时刻温度场。
     offscreen=True 时离屏渲染并保存 outfile (需要 VTK 离屏支持/xvfb)。
-    notebook=True 时返回 figure 供 Jupyter 内联交互显示 (调用前需先执行
-        `from mayavi import mlab; mlab.init_notebook()`), 不弹出 GUI 窗口。
-    需要可选依赖 mayavi: `uv sync --extra viz` (交互式 notebook: `--extra notebook`)。
+    notebook=True 时返回 PyVista Plotter, 供 Jupyter 内联交互显示。
+    backend: "auto" 或 "pyvista"; 旧 Mayavi 用户可传 "mayavi"。
+    需要可选依赖 pyvista: `uv sync --extra viz` (交互式 notebook: `--extra notebook`)。
     """
-    try:
-        from mayavi import mlab
-    except ImportError as e:
-        raise ImportError(
-            "render() 需要可选依赖 mayavi。请运行 `uv sync --extra viz` "
-            "或 `uv pip install mayavi`。"
-        ) from e
+    if backend not in {"auto", "pyvista", "mayavi"}:
+        raise ValueError("backend must be 'auto', 'pyvista', or 'mayavi'")
+    if backend in {"auto", "pyvista"}:
+        try:
+            return _render_pyvista(fdm, field, outfile, offscreen, notebook, size)
+        except ImportError as e:
+            if backend == "pyvista":
+                raise ImportError(
+                    "render() 需要可选依赖 pyvista。请运行 `uv sync --extra viz`。"
+                ) from e
+    return _render_mayavi(fdm, field, outfile, offscreen, notebook, size)
 
-    if offscreen:
-        mlab.options.offscreen = True
 
+def _full_field(fdm, field):
     T = fdm.peak if field == "peak" else fdm.T
     Tfull = np.concatenate([T[:, :0:-1, :], T], axis=1)
     x = fdm.x * 1e3
     y = np.concatenate([-fdm.y[:0:-1], fdm.y]) * 1e3
     z = -fdm.z * 1e3
+    return Tfull, x, y, z
+
+
+def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
+    try:
+        import pyvista as pv
+    except ImportError as e:
+        raise ImportError(
+            "render() 需要可选依赖 pyvista。请运行 `uv sync --extra viz`。"
+        ) from e
+
+    Tfull, x, y, z = _full_field(fdm, field)
+    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+    grid = pv.StructuredGrid(X, Y, Z)
+    grid.point_data["T"] = Tfull.ravel(order="F")
+
+    Tm, T0 = fdm.Tm, fdm.T0
+    haz = 1073.0 if Tm > 1073.0 else 0.5 * (Tm + T0)
+    melt = grid.contour([float(Tm)], scalars="T")
+    haz_surface = grid.contour([float(haz)], scalars="T")
+    mid_slice = grid.slice(normal="y", origin=(0.0, 0.0, 0.0))
+
+    plotter = pv.Plotter(off_screen=bool(offscreen), window_size=size)
+    plotter.set_background("white")
+    if melt.n_points:
+        plotter.add_mesh(melt, color=(0.85, 0.1, 0.1), opacity=0.55,
+                         name="melt")
+    if haz_surface.n_points:
+        plotter.add_mesh(haz_surface, color=(1.0, 0.6, 0.1), opacity=0.25,
+                         name="haz")
+    plotter.add_mesh(mid_slice, scalars="T", cmap="jet", opacity=0.82,
+                     scalar_bar_args={"title": "T [K]"})
+    plotter.add_axes(xlabel="x [mm]", ylabel="y [mm]", zlabel="depth [mm]")
+    plotter.show_bounds(
+        xtitle="x [mm]", ytitle="y [mm]", ztitle="depth [mm]",
+        color="black", font_size=10,
+    )
+    plotter.add_title(
+        f"GoldakFDM 3D ({field}): melt {Tm:.0f} K / HAZ {haz:.0f} K",
+        font_size=12,
+    )
+    plotter.camera_position = "iso"
+    plotter.camera.azimuth = -35
+    plotter.camera.elevation = 20
+
+    if outfile:
+        Path(outfile).parent.mkdir(parents=True, exist_ok=True)
+        plotter.screenshot(str(outfile))
+    if notebook:
+        return plotter
+    if not offscreen:
+        plotter.show()
+    else:
+        plotter.close()
+    return outfile
+
+
+def _render_mayavi(fdm, field, outfile, offscreen, notebook, size):
+    try:
+        from mayavi import mlab
+    except ImportError as e:
+        raise ImportError(
+            "Mayavi 后端需要手动安装 mayavi；推荐使用 `uv sync --extra viz` "
+            "安装默认 PyVista 后端。"
+        ) from e
+
+    if offscreen:
+        mlab.options.offscreen = True
+
+    Tfull, x, y, z = _full_field(fdm, field)
     X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 
     Tm, T0 = fdm.Tm, fdm.T0
