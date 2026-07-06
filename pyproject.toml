@@ -13,6 +13,8 @@ dependencies = [
     "ipykernel>=7.3.0",
     "jupyter>=1.1.1",
     "vtk>=9.3.1",
+    "pandas>=2.3.3",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
