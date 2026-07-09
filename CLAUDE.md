@@ -47,6 +47,16 @@ The package (`src/welding_dynamics/`) is a set of independent physics modules, e
 - `model/*.yaml` are `_target_` nodes, one per class, built with `hydra.utils.instantiate`. Physical constants appear **once**: model nodes interpolate (`${material.k}`) rather than copying. Derived quantities use the custom resolvers in `config.py` — `${wd.half:...}` (diameter→radius) and `${wd.alpha:k,rho,cp}` (thermal diffusivity), so `alpha` can't drift from `k/(rho*cp)`.
 - `process.arc_power_W: null` means "take the upstream power": in `welding-sim` that's module 1's steady `P_ss`; in `welding-sim-3d` it means "don't pass `Q`", i.e. fall back to `GoldakFDM`'s class default. The `db_*` presets set it explicitly so the thermal model is driven by measured `U·I`. Resolve it via `config.arc_power(cfg, fallback=...)`, never by reading the field directly.
 - `hydra.job.chdir` is **false** in every root config, so `./results/` stays relative to the repo root as the README promises. Hydra's own run dirs (`results/runs/`, `results/multirun/`) hold the config snapshot + log and are gitignored. For sweeps use `output=per_run`, which points `output.dir` at `${hydra:runtime.output_dir}` so parallel combinations don't overwrite each other's PNGs.
+**MongoDB stores (`project_data/`, optional).** Two collections in db `welding_dynamics`, each rebuilt idempotently by its own script (both `drop()` then re-insert, and use a `doc_type` discriminator). Neither is needed to run the simulations.
+
+```bash
+uv run python project_data/ingest_mongo.py           # -> welding_parameters (工艺数据库 xlsx)
+uv run python project_data/ingest_config_mongo.py    # -> welding_config     (conf/ 配置树)
+uv run python project_data/ingest_config_mongo.py --dry-run   # 只打印, 不写库
+```
+
+`welding_config` holds `config_root` (3 root yamls), `config_group` (21 group options), `config_composed`, and `config_meta` (git commit, hydra version, per-file sha256). The `config_composed` docs are the payoff: each is a **fully composed and interpolation-resolved** snapshot (`${material.k}`, `${wd.alpha:...}` already evaluated) for one `(root, process)` combination, queryable via `groups.process`. A stored `resolved` dict round-trips: `instantiate(OmegaConf.create(doc["resolved"]).goldak, Q=...)` rebuilds the object. Note `output=per_run` is deliberately *not* composed — its `${hydra:runtime.output_dir}` only resolves inside a live Hydra run.
+
 - The `db_*` process presets come from the production parameter database (see `notebooks/welding_parameter_database_exploration.ipynb`, §9). Caveat baked into `main.py`: the database records **no wire-feed speed**, and module 1's working point is set by `(WFS, CTWD)` — so its steady current need not equal the preset's nominal `process.current_A`. `main.py` prints a `[1 提示]` warning when they differ by >10%. `current_A`/`voltage_V` are documentation-only fields; only `arc_power_W`, `travel_speed_m_s`, `ctwd_m`, `wire_diameter_m` actually drive anything.
 
 Two distinct simulation families, two entry points:
