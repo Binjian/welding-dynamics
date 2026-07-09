@@ -7,6 +7,7 @@
 ```bash
 uv sync          # 创建虚拟环境并安装依赖
 uv run welding-sim   # 运行全部 5 个模块, 图片输出至 ./results/
+uv run welding-sim process=db_median material=aluminum   # 换工况/材料 (见"参数修改")
 ```
 
 或在代码中调用：
@@ -55,7 +56,9 @@ print(g.pool_size())                     # 熔池 长/宽/深 [mm]
 - CMT 模式：电流分段控制 + 焊丝机械回抽，断桥发生于
   低电流（≤160 A），体现低飞溅、低热输入机理
 
-## 典型结果 (默认参数: 1.2 mm 钢丝, WFS 7.2 m/min, 8 mm/s)
+## 典型结果 (默认配置: 1.2 mm 钢丝, WFS 7.2 m/min, 8 mm/s)
+
+由默认配置组合 `process=code_default material=carbon_steel solver=default` 精确复现。
 
 | 量 | 数值 |
 |---|---|
@@ -86,14 +89,23 @@ welding-dynamics/
 │   ├── config.py         # Hydra 自定义解析器 (wd.half / wd.alpha)
 │   ├── conf/             # Hydra 配置树
 │   │   ├── sim.yaml      #   welding-sim 根配置
+│   │   ├── sim_vi.yaml   #   welding-sim-vi 根配置
+│   │   ├── sim_3d.yaml   #   welding-sim-3d 根配置
 │   │   ├── process/      #   A 类工况 (code_default, db_p10/median/p90)
 │   │   ├── material/     #   B 类物性 (carbon_steel, stainless_steel, ...)
 │   │   ├── solver/       #   C 类数值配置 (coarse, default, fine)
 │   │   ├── output/       #   输出目录 (results, per_run)
 │   │   └── model/        #   各类的 _target_ 节点
-│   └── main.py           # 入口 (welding-sim)
+│   ├── main.py           # 入口 (welding-sim)
+│   ├── main_vi.py        # 入口 (welding-sim-vi)
+│   └── main_3d.py        # 入口 (welding-sim-3d)
+├── project_data/
+│   ├── data/             # 原始工艺参数工作簿 (xlsx)
+│   ├── ingest_mongo.py       # xlsx  -> MongoDB welding_parameters
+│   └── ingest_config_mongo.py# conf/ -> MongoDB welding_config
+├── notebooks/            # 数据库探索、PyVista 交互演示
 ├── docs/legacy/          # 早期单文件版本
-└── results/              # 仿真结果图
+└── results/              # 仿真结果图 (Hydra 的 runs/ multirun/ 已 gitignore)
 ```
 
 ## 参数修改 (Hydra 配置)
@@ -134,6 +146,64 @@ uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 - 配置层不侵入库：各模块类均为普通关键字参数，`GoldakFDM(Q=9000)` 可脱离 Hydra 直接使用。
   数据库工况到各模块入参的完整对照见
   [`notebooks/welding_parameter_database_exploration.ipynb`](notebooks/welding_parameter_database_exploration.ipynb) 第 9 节。
+
+## MongoDB 存储 (可选)
+
+`project_data/` 下两个导入脚本把**生产工艺数据**与**仿真配置**分别落库到
+`welding_dynamics` 库的两个集合。**仿真本身不依赖 MongoDB**——这两个集合服务于
+参数溯源与工况分析（notebook 探索、批量扫描的配置留档）。
+
+```bash
+uv run python project_data/ingest_mongo.py                     # -> welding_parameters
+uv run python project_data/ingest_config_mongo.py              # -> welding_config
+uv run python project_data/ingest_config_mongo.py --dry-run    # 只打印统计, 不写库
+```
+
+两个脚本均**幂等**（重复运行先 `drop()` 再重建），均以 `doc_type` 区分文档类型。
+
+### `welding_parameters` — 生产工艺参数数据库 (152 文档)
+
+由 `Welding Process Parameter Database 2022_rev.2022.03.24.xlsx` 解析而来，
+"焊接记录 → 焊道"两级组织；导入时已把"送丝设定(实际电流)"、双丝主/从、
+`一元化` 电压等格式清洗为数值字段（原值保留在 `*_raw`）。
+
+| `doc_type` | 数量 | 内容 |
+|---|---|---|
+| `procedure` | 130 | 一条工艺记录（设备、母材、坡口、位置），`passes` 内嵌 417 条焊道 |
+| `weave_pattern` | 21 | 摆动库路点波形 |
+| `source_meta` | 1 | 数据来源与录入规则 |
+
+探索与可视化见
+[`notebooks/welding_parameter_database_exploration.ipynb`](notebooks/welding_parameter_database_exploration.ipynb)；
+`conf/process/db_*.yaml` 三个工况预设即由该集合的 P10 / 中位 / P90 统计得出。
+
+### `welding_config` — Hydra 配置树留档 (34 文档)
+
+| `doc_type` | 数量 | 内容 |
+|---|---|---|
+| `config_root` | 3 | `sim` / `sim_vi` / `sim_3d` 根配置：原文、`defaults`、入口点 |
+| `config_group` | 21 | 各分组选项（`process/db_median`、`model/gmaw` …）：原文 + 解析后 dict |
+| `config_composed` | 9 | **组合并求值后**的最终配置，按 `(root, process)` 切面 |
+| `config_meta` | 1 | 源目录、git 提交、hydra 版本、逐文件 sha256 |
+
+`config_composed` 是这个集合的价值所在：`${material.k}`、`${wd.alpha:...}` 等插值
+**已全部求值**，存的就是仿真真正拿到的那份配置，可按分组直接查询，也能回灌重建对象：
+
+```python
+from pymongo import MongoClient
+from omegaconf import OmegaConf
+from hydra.utils import instantiate
+import welding_dynamics.config          # 导入即注册 wd.* 解析器
+
+cc = MongoClient("mongodb://localhost:27017")["welding_dynamics"]["welding_config"]
+doc = cc.find_one({"doc_type": "config_composed", "root": "sim",
+                   "groups.process": "db_median"})
+cfg = OmegaConf.create(doc["resolved"])
+g = instantiate(cfg.goldak, Q=cfg.process.arc_power_W)   # Q=8120 W, v=5.15 mm/s
+```
+
+注：`output=per_run` 含 `${hydra:runtime.output_dir}`，脱离 Hydra 运行期无法求值，
+故不参与组合（仍以 `config_group` 保留原文）。
 
 ## 参考
 - Rosenthal, D. (1946). The theory of moving sources of heat.
