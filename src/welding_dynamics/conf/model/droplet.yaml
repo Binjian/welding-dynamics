@@ -1,0 +1,11 @@
+# 模块 3: 熔滴过渡 (静力平衡 + pinch 不稳定)
+_target_: welding_dynamics.droplet.DropletDynamics
+rw: ${wd.half:${process.wire_diameter_m}}
+gamma: ${material.gamma}        # N/m      表面张力 (保持力)
+rho: ${material.rho_liquid}     # kg/m^3   液态熔滴密度
+k1: 3.0e-4
+k2: 5.0e-5
+s: 6.0e-3        # m        干伸长 (熔化速率用)
+rho_p: 0.06      # kg/m^3   等离子体密度
+v_p: 100.0       # m/s      等离子流速度
+Cd: 0.44         # -        拖曳系数

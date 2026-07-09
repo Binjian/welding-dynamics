@@ -1,0 +1,11 @@
+# 灰铸铁 (手册近似值)
+name: cast_iron
+label: 铸铁
+rho: 7200.0
+cp: 500.0
+k: 50.0
+T0: 298.0
+Tm: 1450.0
+rho_liquid: 6800.0
+gamma: 1.0
+dgamma_dT: -3.0e-4

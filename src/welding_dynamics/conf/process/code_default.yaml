@@ -1,0 +1,13 @@
+# 仿真包的历史默认工况 (README "典型结果" 一栏即由本配置产生)
+name: code_default
+label: 代码默认 (1.2 mm 钢丝, WFS 7.2 m/min, 8 mm/s)
+
+current_A: null            # 仅作记录; 电流是模块 1 的状态量, 不是入参
+voltage_V: null
+arc_power_W: null          # null = 用上游功率 (welding-sim 取模块 1 稳态 P_ss)
+eta: 0.8                   # 电弧热效率
+travel_speed_m_s: 8.0e-3   # 焊接速度 v
+wire_diameter_m: 1.2e-3    # 丝径 -> rw = 直径/2
+wfs_m_s: 0.12              # 送丝速度 (7.2 m/min); 数据库给不出此量
+ctwd_m: 0.018              # 导电嘴-工件距离
+ctwd_step_m: 0.003         # t = step_time 处的 CTWD 阶跃扰动

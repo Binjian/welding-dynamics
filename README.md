@@ -83,14 +83,57 @@ welding-dynamics/
 │   ├── thermal.py        # 模块 2 & 4
 │   ├── droplet.py        # 模块 3
 │   ├── short_circuit.py  # 模块 5
+│   ├── config.py         # Hydra 自定义解析器 (wd.half / wd.alpha)
+│   ├── conf/             # Hydra 配置树
+│   │   ├── sim.yaml      #   welding-sim 根配置
+│   │   ├── process/      #   A 类工况 (code_default, db_p10/median/p90)
+│   │   ├── material/     #   B 类物性 (carbon_steel, stainless_steel, ...)
+│   │   ├── solver/       #   C 类数值配置 (coarse, default, fine)
+│   │   ├── output/       #   输出目录 (results, per_run)
+│   │   └── model/        #   各类的 _target_ 节点
 │   └── main.py           # 入口 (welding-sim)
 ├── docs/legacy/          # 早期单文件版本
 └── results/              # 仿真结果图
 ```
 
-## 参数修改
+## 参数修改 (Hydra 配置)
+
 所有物理/工艺参数集中于各类的 `__init__`（焊丝直径、材料热物性、
-电源参数、Goldak 椭球尺寸等），便于参数研究。
+电源参数、Goldak 椭球尺寸等）。三个 CLI 入口用 [Hydra](https://hydra.cc)
+从 `src/welding_dynamics/conf/` 组合这些参数，便于成组切换与批量扫描：
+
+```bash
+uv run welding-sim --cfg job         # 只打印合成后的完整配置, 不运行
+uv run welding-sim process=db_median # 换一组工况 (生产数据库中位值)
+uv run welding-sim material=aluminum solver=fine   # 换材料 + 加密网格
+uv run welding-sim gmaw.Voc=30.0 run.goldak.t_end=8.0   # 覆盖单个叶子参数
+
+# 批量扫描: 三组工况各跑一次, 图片分别写入各自的输出目录
+uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
+```
+
+配置分组对应三类参数：
+
+| 分组 | 含义 | 可选值 |
+|---|---|---|
+| `process/` | **A 类工况** — 电弧功率、焊接速度、干伸长、丝径 (工艺数据库可确定) | `code_default`, `db_p10`, `db_median`, `db_p90` |
+| `material/` | **B 类材料物性** — ρ, cp, k, Tm, γ (手册值) | `carbon_steel`, `stainless_steel`, `cast_iron`, `aluminum` |
+| `solver/` | **C 类数值配置** — 网格 dx、域尺寸、积分终点 (与工艺无关) | `coarse`, `default`, `fine` |
+| `output/` | 图片输出目录与 dpi | `results`, `per_run` |
+
+要点：
+
+- 默认组合 (`process=code_default material=carbon_steel solver=default`) **精确复现**上面的"典型结果"表。
+- 物理常数在 YAML 中只出现一次：`conf/model/*.yaml` 用 `${material.k}` 之类的插值引用分组；
+  派生量由解析器现算 (`${wd.half:}` 直径→半径，`${wd.alpha:}` 热扩散率 `k/(ρ·cp)`)，不会与 `k, ρ, cp` 漂移。
+- `process.arc_power_W: null` 表示"用上游功率"：`welding-sim` 取模块 1 的自调节稳态功率 `P_ss`；
+  `db_*` 预设则直接给出实测 `U·I`，热源不再依赖模块 1 的估计。
+- **数据库不记录送丝速度 (WFS)**，而模块 1 的工作点由 `(WFS, CTWD)` 决定，
+  因此其稳态电流不一定等于 `db_*` 预设标称的 `current_A`（相差 >10% 时 `main.py` 会打印 `[1 提示]`）。
+  `current_A` / `voltage_V` 仅作记录，真正驱动仿真的是 `arc_power_W`、`travel_speed_m_s`、`ctwd_m`、`wire_diameter_m`。
+- 配置层不侵入库：各模块类均为普通关键字参数，`GoldakFDM(Q=9000)` 可脱离 Hydra 直接使用。
+  数据库工况到各模块入参的完整对照见
+  [`notebooks/welding_parameter_database_exploration.ipynb`](notebooks/welding_parameter_database_exploration.ipynb) 第 9 节。
 
 ## 参考
 - Rosenthal, D. (1946). The theory of moving sources of heat.

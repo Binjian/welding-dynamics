@@ -1,0 +1,52 @@
+# welding-sim — 模块 1/3/4/5 (经典集中参数与 PDE 求解器)
+#
+#   uv run welding-sim                                  # 默认工况 (= README 典型结果)
+#   uv run welding-sim process=db_median                # 用生产数据库中位工况
+#   uv run welding-sim material=stainless_steel solver=fine
+#   uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
+#   uv run welding-sim --cfg job                        # 只打印合成后的配置, 不运行
+defaults:
+  - process: code_default
+  - material: carbon_steel
+  - solver: default
+  - output: results
+  - model@gmaw: gmaw
+  - model@droplet: droplet
+  - model@goldak: goldak
+  - model@rosenthal: rosenthal
+  - model@short_circuit: short_circuit
+  - _self_
+
+run:
+  gmaw:
+    t_end: 1.0
+    x0: [6.0e-3, 150.0]        # [s0 [m], I0 [A]]
+    wfs: ${process.wfs_m_s}
+    ctwd: ${process.ctwd_m}
+    ctwd_step: ${process.ctwd_step_m}
+    step_time: 0.5             # s   CTWD 阶跃时刻
+    steady_tail: 200           # 取末尾 N 个采样点平均作稳态功率 (共 2000 点)
+  droplet:
+    I_min: 120.0
+    I_max: 340.0
+    n_I: 23
+    transition_dia_factor: 1.3 # 熔滴直径 <= 该倍数 × 丝径 -> 判定为喷射过渡
+    globular_I: 170.0
+    globular_t_end: 0.25
+    spray_I: 300.0
+    spray_t_end: 0.05
+  goldak:
+    t_end: ${solver.t_end}
+    x_start: ${solver.x_start}
+  short_circuit:
+    t_end: 0.12
+    dt: 2.0e-6
+
+hydra:
+  run:
+    dir: results/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: results/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.override_dirname}
+  job:
+    chdir: false               # 保持 ./results/ 相对仓库根目录 (README 约定)

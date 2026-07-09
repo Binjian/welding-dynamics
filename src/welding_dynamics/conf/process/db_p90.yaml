@@ -1,0 +1,13 @@
+# 数据库工艺窗口上沿 (P90): 大电流 / 快速 -> 高热输入 (射流过渡区)
+name: db_p90
+label: 数据库 P90 (420 A, 31.0 V, 7.5 mm/s)
+
+current_A: 420.0
+voltage_V: 31.0
+arc_power_W: 13020.0
+eta: 0.8
+travel_speed_m_s: 7.5e-3
+wire_diameter_m: 1.2e-3
+wfs_m_s: 0.12
+ctwd_m: 0.025              # source.stickout_mm P90
+ctwd_step_m: 0.003

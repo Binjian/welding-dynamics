@@ -1,0 +1,14 @@
+# 生产数据库中位工况 (welding_dynamics.welding_parameters, 365 条可解析焊道)
+# 碳钢 / 1.2 mm 实芯丝 / 82%Ar+18%CO2
+name: db_median
+label: 数据库中位 (280 A, 29.0 V, 5.15 mm/s)
+
+current_A: 280.0
+voltage_V: 29.0
+arc_power_W: 8120.0        # U·I, 直接驱动热源 (不再用模块 1 的估计功率)
+eta: 0.8
+travel_speed_m_s: 5.15e-3
+wire_diameter_m: 1.2e-3    # 丝径众数
+wfs_m_s: 0.12              # 数据库无 WFS (林肯只记"工作点"), 沿用默认
+ctwd_m: 0.020              # source.stickout_mm 中位数
+ctwd_step_m: 0.003

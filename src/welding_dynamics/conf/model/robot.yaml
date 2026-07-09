@@ -1,0 +1,7 @@
+# 模块 7: 二连杆焊接机器人臂 (构型相关质量矩阵)
+_target_: welding_dynamics.robot_vi.TwoLinkArm
+m1: 4.0          # kg
+m2: 2.5          # kg
+l1: 0.40         # m
+l2: 0.35         # m
+g: 9.81          # m/s^2

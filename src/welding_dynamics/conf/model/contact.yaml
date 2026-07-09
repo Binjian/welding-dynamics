@@ -1,0 +1,10 @@
+# 模块 8: 非光滑接触 (CMT 机械循环)
+_target_: welding_dynamics.shortcircuit_vi.ContactCycleVI
+rd: 5.0e-4
+gamma: ${material.gamma}
+rho: ${material.rho_liquid}
+zeta: 0.03
+gap: 4.0e-4      # m    熔池表面位置
+v_feed: 0.08     # m/s  送丝速度
+v_retract: 0.10  # m/s  回抽速度
+F_rup_frac: 1.4  # -    断桥张力阈值 / (k * gap)

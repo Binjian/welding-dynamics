@@ -1,0 +1,10 @@
+# 模块 2: Rosenthal 移动点源解析解 (与 GoldakFDM 互为交叉验证)
+# 同样不设 Q, 见 model/goldak.yaml。
+_target_: welding_dynamics.thermal.RosenthalThermal
+eta: ${process.eta}
+v: ${process.travel_speed_m_s}
+k: ${material.k}
+# alpha 由 k/(rho*cp) 现算, 与 GoldakFDM 内部一致 (不另存一份, 避免漂移)
+alpha: ${wd.alpha:${material.k},${material.rho},${material.cp}}
+T0: ${material.T0}
+Tm: ${material.Tm}

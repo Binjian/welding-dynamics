@@ -11,7 +11,7 @@ Note: the README and most code comments/docstrings are in Chinese. Match that co
 ## Commands
 
 ```bash
-uv sync             # create .venv and install deps (numpy, scipy, matplotlib)
+uv sync             # create .venv and install deps (numpy, scipy, matplotlib, hydra-core)
 uv sync --extra viz # additionally install mayavi (heavy: VTK/Qt) for module 9 rendering
 uv sync --extra notebook  # mayavi + jupyter for the interactive demo notebook
 uv run welding-sim      # run modules 1–5, writes plots to ./results/
@@ -20,9 +20,18 @@ uv run welding-sim-3d   # module 9: solve GoldakFDM, export OpenFOAM case, Mayav
 uv run jupyter lab notebooks/mayavi_interactive_demo.ipynb  # interactive 3D render
 ```
 
-There is **no test suite, linter, or formatter configured.** Validation is done by running the two CLIs and inspecting the printed steady-state numbers (compared against the reference table in README.md) and the regenerated `results/*.png`. When changing physics, run the relevant CLI and confirm the printed values still match the README's "典型结果" table.
+All three CLIs are Hydra apps (`conf/` inside the package). Override from the command line:
 
-To exercise a single module without running everything, import the class directly:
+```bash
+uv run welding-sim --cfg job              # print the composed config, run nothing
+uv run welding-sim process=db_median      # swap a config group
+uv run welding-sim material=aluminum solver=fine gmaw.Voc=30.0   # group + leaf override
+uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run  # sweep
+```
+
+There is **no test suite, linter, or formatter configured.** Validation is done by running the two CLIs and inspecting the printed steady-state numbers (compared against the reference table in README.md) and the regenerated `results/*.png`. When changing physics, run the relevant CLI **with default config groups** and confirm the printed values still match the README's "典型结果" table — the defaults (`process=code_default material=carbon_steel solver=default`) are pinned to reproduce that table exactly.
+
+To exercise a single module without running everything, import the class directly. The classes take plain kwargs and **do not depend on Hydra** — the config tree is a layer on top, not a requirement:
 
 ```python
 uv run python -c "from welding_dynamics import GMAWDynamics; print(GMAWDynamics().simulate()['I'][-1])"
@@ -30,7 +39,15 @@ uv run python -c "from welding_dynamics import GMAWDynamics; print(GMAWDynamics(
 
 ## Architecture
 
-The package (`src/welding_dynamics/`) is a set of independent physics modules, each a self-contained class whose physical/process parameters live entirely in its `__init__` (wire diameter, material thermophysics, power-source params, Goldak ellipsoid dimensions). Parameter studies are done by constructing with overrides — there is no config file. Modules are coupled only by passing scalar outputs between them (e.g. module 1's steady-state power drives module 4's heat source); they share no global state.
+The package (`src/welding_dynamics/`) is a set of independent physics modules, each a self-contained class whose physical/process parameters live entirely in its `__init__` (wire diameter, material thermophysics, power-source params, Goldak ellipsoid dimensions). Every class takes plain keyword arguments and can be constructed directly with overrides. Modules are coupled only by passing scalar outputs between them (e.g. module 1's steady-state power drives module 4's heat source); they share no global state.
+
+**Configuration (`conf/`, Hydra).** The three CLIs compose their parameters from a Hydra config tree at `src/welding_dynamics/conf/` (needs `conf/__init__.py` — Hydra resolves a package-relative `config_path` as an importable module). It is a *layer over* the classes, not a replacement: nothing in the library imports Hydra, and `GoldakFDM(Q=9000)` still works standalone.
+
+- Config groups mirror the three kinds of parameter: `process/` (operating point — current, arc power, travel speed, CTWD, wire diameter; the quantities a welding-procedure database can supply), `material/` (handbook thermophysics), `solver/` (grid `dx`, domain, `t_end` — numerics only), `output/` (plot dir + dpi).
+- `model/*.yaml` are `_target_` nodes, one per class, built with `hydra.utils.instantiate`. Physical constants appear **once**: model nodes interpolate (`${material.k}`) rather than copying. Derived quantities use the custom resolvers in `config.py` — `${wd.half:...}` (diameter→radius) and `${wd.alpha:k,rho,cp}` (thermal diffusivity), so `alpha` can't drift from `k/(rho*cp)`.
+- `process.arc_power_W: null` means "take the upstream power": in `welding-sim` that's module 1's steady `P_ss`; in `welding-sim-3d` it means "don't pass `Q`", i.e. fall back to `GoldakFDM`'s class default. The `db_*` presets set it explicitly so the thermal model is driven by measured `U·I`. Resolve it via `config.arc_power(cfg, fallback=...)`, never by reading the field directly.
+- `hydra.job.chdir` is **false** in every root config, so `./results/` stays relative to the repo root as the README promises. Hydra's own run dirs (`results/runs/`, `results/multirun/`) hold the config snapshot + log and are gitignored. For sweeps use `output=per_run`, which points `output.dir` at `${hydra:runtime.output_dir}` so parallel combinations don't overwrite each other's PNGs.
+- The `db_*` process presets come from the production parameter database (see `notebooks/welding_parameter_database_exploration.ipynb`, §9). Caveat baked into `main.py`: the database records **no wire-feed speed**, and module 1's working point is set by `(WFS, CTWD)` — so its steady current need not equal the preset's nominal `process.current_A`. `main.py` prints a `[1 提示]` warning when they differ by >10%. `current_A`/`voltage_V` are documentation-only fields; only `arc_power_W`, `travel_speed_m_s`, `ctwd_m`, `wire_diameter_m` actually drive anything.
 
 Two distinct simulation families, two entry points:
 

@@ -1,0 +1,8 @@
+# 模块 6: 悬垂熔滴振荡 / 脉冲 MIG 共振 (变分积分器)
+_target_: welding_dynamics.droplet_vi.DropletOscillatorVI
+rd: 5.0e-4       # m    熔滴半径
+gamma: ${material.gamma}
+rho: ${material.rho_liquid}
+zeta: 0.02       # -    阻尼比
+F0_frac: 0.15    # -    脉冲力幅 (静挠度 F0_frac * rd)
+duty: 0.35       # -    脉冲占空比

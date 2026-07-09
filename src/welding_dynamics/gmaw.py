@@ -7,11 +7,13 @@ from scipy.integrate import solve_ivp
 class GMAWDynamics:
     """状态 x=[s, I]: 干伸长 s [m], 电流 I [A]"""
 
-    def __init__(self):
-        self.Voc, self.Rs, self.Rl, self.Ls = 32.0, 0.004, 0.004, 3.0e-4
-        self.V0, self.Ea, self.Ra = 15.5, 800.0, 0.022
-        self.rw = 0.6e-3
-        self.k1, self.k2, self.rho_r = 3.0e-4, 5.0e-5, 0.25
+    def __init__(self, Voc=32.0, Rs=0.004, Rl=0.004, Ls=3.0e-4,
+                 V0=15.5, Ea=800.0, Ra=0.022, rw=0.6e-3,
+                 k1=3.0e-4, k2=5.0e-5, rho_r=0.25):
+        self.Voc, self.Rs, self.Rl, self.Ls = Voc, Rs, Rl, Ls
+        self.V0, self.Ea, self.Ra = V0, Ea, Ra
+        self.rw = rw
+        self.k1, self.k2, self.rho_r = k1, k2, rho_r
 
     def melting_rate(self, s, I):
         return self.k1 * I + self.k2 * s * I ** 2

@@ -1,0 +1,3 @@
+# 多组扫描 (--multirun): 每个组合写入自己的 Hydra 输出目录, 避免互相覆盖
+dir: ${hydra:runtime.output_dir}
+dpi: 140

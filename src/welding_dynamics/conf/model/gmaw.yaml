@@ -1,0 +1,14 @@
+# 模块 1: 电弧自调节 (集中参数 ODE)
+_target_: welding_dynamics.gmaw.GMAWDynamics
+rw: ${wd.half:${process.wire_diameter_m}}   # 焊丝半径 [m]
+# 以下为电源静特性与电弧常数: 属机型标定量, 数据库仅记录型号 -> 保持默认
+Voc: 32.0        # V      空载电压
+Rs: 0.004        # Ohm    电源内阻
+Rl: 0.004        # Ohm    回路电阻
+Ls: 3.0e-4       # H      回路电感
+V0: 15.5         # V      电弧压降常数项
+Ea: 800.0        # V/m    弧柱电场强度
+Ra: 0.022        # Ohm    电弧等效电阻
+k1: 3.0e-4       # m/(s·A)      熔化速率线性项
+k2: 5.0e-5       # m/(s·A^2·m)  熔化速率焦耳项 (干伸长电阻热)
+rho_r: 0.25      # Ohm/m  焊丝单位长度电阻

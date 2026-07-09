@@ -1,0 +1,11 @@
+# 5xxx 系铝镁合金 (手册近似值)
+name: aluminum
+label: 铝合金
+rho: 2700.0
+cp: 900.0
+k: 170.0             # 高导热 -> 热量迅速散失, 需要更高的线能量
+T0: 298.0
+Tm: 913.0
+rho_liquid: 2400.0
+gamma: 0.87
+dgamma_dT: -1.55e-4

@@ -1,0 +1,22 @@
+# 模块 4: Goldak 双椭球热源 + 三维瞬态 FDM
+# 注意: 此处不设 Q。热源功率由 process.arc_power_W 决定 (null = 用上游功率)。
+_target_: welding_dynamics.thermal.GoldakFDM
+eta: ${process.eta}
+v: ${process.travel_speed_m_s}
+# 双椭球几何 (半轴): 前半轴 cf 短、后半轴 cr 长 -> 拖尾的熔池形状
+a: 4.0e-3        # m  横向 (y) 半轴
+b: 4.0e-3        # m  深度 (z) 半轴
+cf: 4.0e-3       # m  前半轴
+cr: 9.0e-3       # m  后半轴
+ff: 0.6          # -  前半球热量份额 (后半球 fr = 2 - ff)
+# 材料
+rho: ${material.rho}
+cp: ${material.cp}
+k: ${material.k}
+T0: ${material.T0}
+Tm: ${material.Tm}
+# 网格 / 域
+dx: ${solver.dx}
+Lx: ${solver.Lx}
+Ly: ${solver.Ly}
+Lz: ${solver.Lz}

@@ -1,0 +1,36 @@
+# welding-sim-3d — 模块 9 (三维场 -> OpenFOAM 导出 -> PyVista 体渲染)
+#
+#   uv run welding-sim-3d
+#   uv run welding-sim-3d process=db_p90 solver=fine
+#   uv run welding-sim-3d render.enabled=false          # 无头环境只导出算例
+defaults:
+  - process: code_default
+  - material: carbon_steel
+  - solver: default
+  - output: results
+  - model@goldak: goldak
+  - _self_
+
+run:
+  goldak:
+    t_end: ${solver.t_end}
+    x_start: ${solver.x_start}
+
+export:
+  enabled: true
+  case_dir: openfoam_case      # 相对 output.dir
+
+render:
+  enabled: true
+  field: peak                  # peak (峰值温度: 熔合区+HAZ) 或 final (末时刻)
+  offscreen: true
+  outfile: m9_goldak_3d.png    # 相对 output.dir
+
+hydra:
+  run:
+    dir: results/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: results/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.override_dirname}
+  job:
+    chdir: false

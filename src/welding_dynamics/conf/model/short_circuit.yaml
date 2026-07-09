@@ -1,0 +1,25 @@
+# 模块 5: 短路过渡 / CMT 混杂动力学
+# cmt 不在此设定: main.py 用同一组参数分别实例化 cmt=False / True 作对比。
+_target_: welding_dynamics.short_circuit.ShortCircuitGMAW
+rw: ${wd.half:${process.wire_diameter_m}}
+# 短路过渡是独立的低电压工作区间, 其电源设定与 process.* (射流/滴状工况) 无关
+Voc: 19.0        # V     低电压短弧
+Rtot: 0.012      # Ohm
+Ls: 1.5e-4       # H
+V0: 14.0
+Ea: 800.0
+Ra: 0.02
+k1: 3.0e-4
+k2: 5.0e-5
+WFS: 0.080       # m/s   短路工况送丝速度 (4.8 m/min)
+CTWD: 0.012      # m     短弧的导电嘴-工件距离
+la_short: 4.0e-4       # m   弧长低于此 -> 短路
+rb0_frac: 0.75         # -   液桥初始颈缩半径 / rw
+rb_min_frac: 0.12      # -   断桥半径 / rw
+A_gam: 0.045           # m/s     表面张力驱动的缩颈速率
+B_pinch: 1.6e-6        # m/(s·A^2)  pinch 驱动的缩颈速率
+drop_len: 8.0e-4       # m   每次过渡转移的焊丝长度
+# CMT 控制参数 (cmt=True 时生效)
+I_bg: 45.0             # A   短路期背景电流
+I_boost: 160.0         # A   电弧期升流值
+WFS_retract: -0.10     # m/s 机械回抽速度
