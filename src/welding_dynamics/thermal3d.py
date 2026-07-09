@@ -8,7 +8,70 @@
   pyvista 为可选依赖, 延迟导入 (uv sync --extra viz)。
 """
 from pathlib import Path
+import os
+import shutil
+import subprocess
+import time
 import numpy as np
+
+
+# ----------------------------------------------------------------------------
+# 无头显示支持: VTK/PyVista 渲染需要活跃的 OpenGL 上下文。PyPI 的 vtk wheel 用
+# GLX (需 X 服务器), 无 OSMesa 软件渲染。若继承的 $DISPLAY 已失效 (如远程/容器里
+# 的 :1 已死), vtkXOpenGLRenderWindow 会直接 Aborting 杀掉进程 (表现为 kernel
+# crash)。故渲染前确保有一个可用显示, 需要时自动拉起 Xvfb 虚拟帧缓冲。
+# ----------------------------------------------------------------------------
+_XVFB_PROC = None
+
+
+def _display_works(display):
+    """探测给定 $DISPLAY 能否创建离屏 GL 窗口 (在子进程里试, 避免污染本进程)。"""
+    probe = (
+        "import vtk;"
+        "w=vtk.vtkXOpenGLRenderWindow();w.SetOffScreenRendering(1);w.Render()"
+    )
+    return subprocess.run(
+        ["python", "-c", probe],
+        env={**os.environ, "DISPLAY": display},
+        capture_output=True,
+    ).returncode == 0
+
+
+def ensure_display():
+    """确保存在可用的 X 显示供 VTK 渲染; 无头/显示失效时启动 Xvfb 并设置 $DISPLAY。
+
+    返回可用的 DISPLAY 字符串。非 posix 或已有可用显示时为空操作。用于 Jupyter
+    内联渲染与离屏截图等所有 PyVista 渲染路径之前。
+    """
+    global _XVFB_PROC
+    if os.name != "posix":
+        return os.environ.get("DISPLAY")
+    cur = os.environ.get("DISPLAY", "")
+    if cur and _display_works(cur):
+        return cur
+    if _XVFB_PROC is not None and _XVFB_PROC.poll() is None:
+        return os.environ.get("DISPLAY")  # 本会话已拉起的 Xvfb 仍在跑
+    if not shutil.which("Xvfb"):
+        raise RuntimeError(
+            "无可用 X 显示且未安装 Xvfb。请 `apt-get install xvfb`, "
+            "或在 `xvfb-run -a jupyter lab` 下启动内核。"
+        )
+    for n in range(99, 120):
+        display = f":{n}"
+        proc = subprocess.Popen(
+            ["Xvfb", display, "-screen", "0", "1280x1024x24", "-nolisten", "tcp"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        for _ in range(50):  # 最多等 5s 让 Xvfb 就绪
+            if proc.poll() is not None:
+                break  # 该显示号被占用, 换下一个
+            if _display_works(display):
+                os.environ["DISPLAY"] = display
+                _XVFB_PROC = proc
+                return display
+            time.sleep(0.1)
+        proc.terminate()
+    raise RuntimeError("无法启动 Xvfb 虚拟帧缓冲。")
 
 
 # ----------------------------------------------------------------------------
@@ -311,6 +374,8 @@ def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
             "render() 需要可选依赖 pyvista。请运行 `uv sync --extra viz`。"
         ) from e
 
+    ensure_display()  # 无头/失效显示时拉起 Xvfb, 否则 VTK 会 Abort 杀掉内核
+
     Tfull, x, y, z = _full_field(fdm, field)
     X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
     grid = pv.StructuredGrid(X, Y, Z)
@@ -350,10 +415,19 @@ def _render_pyvista(fdm, field, outfile, offscreen, notebook, size):
         Path(outfile).parent.mkdir(parents=True, exist_ok=True)
         plotter.screenshot(str(outfile))
     if notebook:
-        # 必须返回 viewer 控件 (具备 rich repr) 才会内联渲染; 直接返回 Plotter
-        # 只会打印 <...Plotter...>。'html' = 自包含 vtk.js 控件 (ipywidgets),
-        # 不依赖 trame 服务器/iframe, 在受限 JupyterLab 下最稳健, 可旋转/缩放。
-        return plotter.show(jupyter_backend="html", return_viewer=True)
+        # 返回内联 viewer。'html' 后端返回 pyvista 自定义 EmbeddableWidget,
+        # 其 rich repr 仅有 application/vnd.jupyter.widget-view+json; VS Code 的
+        # ipywidgets 管理器没有该自定义控件的前端 JS, 会报 "Could not render
+        # content for application/vnd.jupyter.widget-view+json"。故取出其自包含的
+        # <iframe srcdoc=...> (vtk.js, 无需 trame 服务器), 用 IPython.display.HTML
+        # 以 text/html 输出 —— VS Code / JupyterLab / classic notebook 均可原生
+        # 渲染, 仍可旋转/缩放。
+        viewer = plotter.show(jupyter_backend="html", return_viewer=True)
+        html = getattr(viewer, "value", None)
+        if html:
+            from IPython.display import HTML
+            return HTML(html)
+        return viewer
     if not offscreen:
         plotter.show()
     else:
