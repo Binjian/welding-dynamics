@@ -1,0 +1,6 @@
+# 三角波直线摆 —— 生产数据库的众数工况 (2 Hz × 4 mm, 87 条焊道;
+# 备注 8: 老版摆弧仅支持"直线摆")。amplitude_m 为峰-峰摆幅。
+_target_: welding_dynamics.weave.HarmonicWeave
+shape: triangle
+amplitude_m: 4.0e-3
+frequency_Hz: 2.0

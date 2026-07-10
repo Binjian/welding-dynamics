@@ -31,9 +31,12 @@ def main(cfg: DictConfig):
     # 求解三维瞬态温度场。process.arc_power_W = null 时沿用 GoldakFDM 的类默认功率。
     Q = arc_power(cfg)
     g = instantiate(cfg.goldak, **({} if Q is None else {"Q": Q}))
+    if g.weaving:
+        print(f"[9 摆动] {g.weave.describe()} -> 全宽网格 (半对称失效)")
     g.run(t_end=t_end, x_start=cfg.run.goldak.x_start)
     L, W, D = g.pool_size()
-    print(f"[9 三维场] 网格 {g.Nx}x{g.Ny}x{g.Nz} (半模型), "
+    print(f"[9 三维场] 网格 {g.Nx}x{g.Ny}x{g.Nz} "
+          f"({'半模型' if g.symmetric else '全宽模型'}), "
           f"熔池 L×W×D = {L:.1f}×{W:.1f}×{D:.1f} mm")
     print(f"[9 三维场] 末时刻 T_max = {g.T.max():.0f} K, "
           f"峰值场 T_max = {g.peak.max():.0f} K")

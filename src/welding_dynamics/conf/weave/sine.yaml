@@ -1,0 +1,5 @@
+# 正弦摆动 (解析波形, 同幅同频便于与三角波对比)
+_target_: welding_dynamics.weave.HarmonicWeave
+shape: sine
+amplitude_m: 4.0e-3
+frequency_Hz: 2.0

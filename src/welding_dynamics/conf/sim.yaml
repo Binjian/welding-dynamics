@@ -3,12 +3,14 @@
 #   uv run welding-sim                                  # 默认工况 (= README 典型结果)
 #   uv run welding-sim process=db_median                # 用生产数据库中位工况
 #   uv run welding-sim material=stainless_steel solver=fine
+#   uv run welding-sim weave=triangle                   # 焊枪摆动 (数据库众数 2Hz×4mm)
 #   uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 #   uv run welding-sim --cfg job                        # 只打印合成后的配置, 不运行
 defaults:
   - process: code_default
   - material: carbon_steel
   - solver: default
+  - weave: none
   - output: results
   - model@gmaw: gmaw
   - model@droplet: droplet

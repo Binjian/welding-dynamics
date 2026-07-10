@@ -20,3 +20,5 @@ dx: ${solver.dx}
 Lx: ${solver.Lx}
 Ly: ${solver.Ly}
 Lz: ${solver.Lz}
+# 焊枪摆动 (weave 分组; none -> null -> 半对称模型, 否则自动切换全宽网格)
+weave: ${weave}

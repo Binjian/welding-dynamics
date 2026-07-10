@@ -37,13 +37,13 @@ ENTRY_POINTS = {"sim": "welding-sim", "sim_vi": "welding-sim-vi",
                 "sim_3d": "welding-sim-3d"}
 
 # 要落库的组合: 带 process 分组的根配置按各工况预设各存一份 (参数研究的常用切面),
-# sim_vi 无 process 分组, 只存默认组合。
+# 外加一份摆动工况; sim_vi 无 process/weave 分组, 只存默认组合。
 # 注意 output=per_run 含 ${hydra:runtime.output_dir}, 脱离 hydra 运行期无法求值, 故不组合。
 PROCESS_OPTIONS = ["code_default", "db_p10", "db_median", "db_p90"]
 COMPOSITIONS = {
-    "sim": [[f"process={p}"] for p in PROCESS_OPTIONS],
+    "sim": [[f"process={p}"] for p in PROCESS_OPTIONS] + [["weave=triangle"]],
     "sim_vi": [[]],
-    "sim_3d": [[f"process={p}"] for p in PROCESS_OPTIONS],
+    "sim_3d": [[f"process={p}"] for p in PROCESS_OPTIONS] + [["weave=pattern1"]],
 }
 
 
@@ -139,6 +139,11 @@ def build_docs():
             groups = {g: resolved[g]["name"]
                       for g in ("process", "material", "solver")
                       if isinstance(resolved.get(g), dict) and "name" in resolved[g]}
+            # weave 节点是 _target_ 而非 name/label, 选项名从 override 取;
+            # 未覆盖时即根配置默认 (none)。
+            if "weave" in resolved:
+                groups["weave"] = next((o.split("=", 1)[1] for o in overrides
+                                        if o.startswith("weave=")), "none")
             base = root_defaults.get(root, {})
             docs.append({
                 "doc_type": "config_composed",

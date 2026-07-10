@@ -100,13 +100,16 @@ class OpenFOAMExporter:
 
     单元 (i,j,k) 线性序   c = i + Nx*(j + Ny*k)   <-> field.ravel(order='F')
     顶点 (i,j,k) 线性序   p = i + (Nx+1)*(j + (Ny+1)*k)
-    patch: symmetryPlane (y=0 对称面), top (z=0 工件上表面), farField (其余远场)。
+    patch: 半对称模型为 symmetryPlane (y=0 对称面) + top (z=0 工件上表面)
+    + farField (其余远场); 全宽模型 (摆动工况, fdm.symmetric=False) 没有对称面,
+    yMin 一侧并入 farField。
     """
 
     def __init__(self, fdm):
         self.fdm = fdm
         self.Nx, self.Ny, self.Nz = fdm.Nx, fdm.Ny, fdm.Nz
         self.dx = fdm.dx
+        self.symmetric = getattr(fdm, "symmetric", True)
 
     # -- 几何/拓扑 ----------------------------------------------------------
     def _pid(self, i, j, k):
@@ -119,7 +122,8 @@ class OpenFOAMExporter:
     def _points(self):
         npx, npy, npz = self.Nx + 1, self.Ny + 1, self.Nz + 1
         ii = np.arange(npx) * self.dx
-        jj = np.arange(npy) * self.dx
+        # 全宽模型 y 从负侧开始 (fdm.y[0] < 0); 半对称模型 fdm.y[0] = 0, 与旧行为一致
+        jj = float(self.fdm.y[0]) + np.arange(npy) * self.dx
         kk = np.arange(npz) * self.dx
         Xp, Yp, Zp = np.meshgrid(ii, jj, kk, indexing="ij")
         return np.column_stack([Xp.ravel("F"), Yp.ravel("F"), Zp.ravel("F")])
@@ -165,12 +169,13 @@ class OpenFOAMExporter:
             bnd_owner.append(o)
             bnd_quads.append(q)
 
-        # symmetryPlane: y=0 (j=0), 外法向 -y
+        # yMin (j=0), 外法向 -y: 半对称模型是对称面; 全宽模型是远场
         I, J, K = grid(np.arange(Nx), [0], np.arange(Nz))
-        o = cid(I, J, K).ravel()
-        q = np.stack([pid(I, 0, K), pid(I + 1, 0, K),
-                      pid(I + 1, 0, K + 1), pid(I, 0, K + 1)], -1).reshape(-1, 4)
-        add_patch("symmetryPlane", "symmetryPlane", o, q)
+        ymin_o = cid(I, J, K).ravel()
+        ymin_q = np.stack([pid(I, 0, K), pid(I + 1, 0, K),
+                           pid(I + 1, 0, K + 1), pid(I, 0, K + 1)], -1).reshape(-1, 4)
+        if self.symmetric:
+            add_patch("symmetryPlane", "symmetryPlane", ymin_o, ymin_q)
 
         # top: z=0 (k=0, 工件上表面/焊枪侧), 外法向 -z
         I, J, K = grid(np.arange(Nx), np.arange(Ny), [0])
@@ -179,8 +184,11 @@ class OpenFOAMExporter:
                       pid(I + 1, J + 1, 0), pid(I + 1, J, 0)], -1).reshape(-1, 4)
         add_patch("top", "patch", o, q)
 
-        # farField: xMin(-x) xMax(+x) yMax(+y) zMax(+z) 合并
+        # farField: xMin(-x) xMax(+x) yMax(+y) zMax(+z) 合并; 全宽模型再并入 yMin(-y)
         far_o, far_q = [], []
+        if not self.symmetric:
+            far_o.append(ymin_o)
+            far_q.append(ymin_q)
         # xMin
         I, J, K = grid([0], np.arange(Ny), np.arange(Nz))
         far_o.append(cid(I, J, K).ravel())
@@ -244,9 +252,10 @@ class OpenFOAMExporter:
             f.write(")\n")
 
     def _write_field(self, path, obj, time, values, T0, uniform=False):
+        sym = "    symmetryPlane { type symmetryPlane; }\n" if self.symmetric else ""
         bnd = (
             "boundaryField\n{\n"
-            "    symmetryPlane { type symmetryPlane; }\n"
+            + sym +
             "    top           { type zeroGradient; }\n"
             f"    farField      {{ type fixedValue; value uniform {T0:.6g}; }}\n"
             "}\n"
@@ -359,9 +368,15 @@ def render(fdm, field="peak", outfile=None, offscreen=False,
 
 def _full_field(fdm, field):
     T = fdm.peak if field == "peak" else fdm.T
-    Tfull = np.concatenate([T[:, :0:-1, :], T], axis=1)
+    if getattr(fdm, "symmetric", True):
+        # 半对称模型: 沿 y=0 镜像补出另一半
+        Tfull = np.concatenate([T[:, :0:-1, :], T], axis=1)
+        y = np.concatenate([-fdm.y[:0:-1], fdm.y]) * 1e3
+    else:
+        # 全宽模型 (摆动工况): 场本身已覆盖两侧, 不镜像
+        Tfull = T
+        y = fdm.y * 1e3
     x = fdm.x * 1e3
-    y = np.concatenate([-fdm.y[:0:-1], fdm.y]) * 1e3
     z = -fdm.z * 1e3
     return Tfull, x, y, z
 

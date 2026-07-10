@@ -2,11 +2,13 @@
 #
 #   uv run welding-sim-3d
 #   uv run welding-sim-3d process=db_p90 solver=fine
+#   uv run welding-sim-3d weave=pattern1                # 摆动库 1 号波形 (全宽网格)
 #   uv run welding-sim-3d render.enabled=false          # 无头环境只导出算例
 defaults:
   - process: code_default
   - material: carbon_steel
   - solver: default
+  - weave: none
   - output: results
   - model@goldak: goldak
   - _self_

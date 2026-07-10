@@ -1,0 +1,11 @@
+# 摆动库 1 号路点波形 (welding_parameters.weave_pattern, pattern_id=1):
+# 两侧停留的梯形摆 (12-42% 停左侧, 65-89% 停右侧), 停留利于坡口侧壁熔合。
+# 路点数据逐字取自数据库; 其余 20 个波形可按同格式增补。
+# z_pct (垂直抬枪) 不建模: 热源始终贴工件上表面。
+_target_: welding_dynamics.weave.WaypointWeave
+pattern_id: 1
+time_pct: [12, 42, 54, 65, 89]
+x_pct: [0, 0, 0, 0, 0]
+y_pct: [-70, -70, 0, 70, 70]
+amplitude_m: 4.0e-3
+frequency_Hz: 2.0

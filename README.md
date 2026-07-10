@@ -48,6 +48,10 @@ print(g.pool_size())                     # 熔池 长/宽/深 [mm]
 - 热源逐步数值重归一化，保证能量精确守恒
 - 输出瞬态温度场、峰值温度场（熔合区 / HAZ 划分）与熔池尺寸
 - 与模块 2 的 Rosenthal 解交叉验证
+- 支持**焊枪摆动** (`weave.py`)：`GoldakFDM(weave=HarmonicWeave(...))` 给热源
+  一个横向偏移 y_s(t)（正弦/三角直线摆，或摆动库路点波形 `WaypointWeave`）。
+  摆动破坏 y=0 对称性，此时自动切换全宽网格（计算量约 ×2）；
+  CLI 经 `weave=` 分组启用，见下文"参数修改"
 
 ### 模块 5 — 短路过渡 / CMT (`short_circuit.py`)
 电弧相 ⇄ 短路相混杂 (hybrid) 状态机：
@@ -84,6 +88,7 @@ welding-dynamics/
 │   ├── __init__.py
 │   ├── gmaw.py           # 模块 1
 │   ├── thermal.py        # 模块 2 & 4
+│   ├── weave.py          # 焊枪摆动运动模型 (HarmonicWeave / WaypointWeave)
 │   ├── droplet.py        # 模块 3
 │   ├── short_circuit.py  # 模块 5
 │   ├── config.py         # Hydra 自定义解析器 (wd.half / wd.alpha)
@@ -94,6 +99,7 @@ welding-dynamics/
 │   │   ├── process/      #   A 类工况 (code_default, db_p10/median/p90)
 │   │   ├── material/     #   B 类物性 (carbon_steel, stainless_steel, ...)
 │   │   ├── solver/       #   C 类数值配置 (coarse, default, fine)
+│   │   ├── weave/        #   焊枪摆动 (none, triangle, sine, pattern1)
 │   │   ├── output/       #   输出目录 (results, per_run)
 │   │   └── model/        #   各类的 _target_ 节点
 │   ├── main.py           # 入口 (welding-sim)
@@ -118,6 +124,8 @@ welding-dynamics/
 uv run welding-sim --cfg job         # 只打印合成后的完整配置, 不运行
 uv run welding-sim process=db_median # 换一组工况 (生产数据库中位值)
 uv run welding-sim material=aluminum solver=fine   # 换材料 + 加密网格
+uv run welding-sim weave=triangle                  # 焊枪摆动 (数据库众数 2Hz×4mm)
+uv run welding-sim weave=pattern1 weave.amplitude_m=6e-3   # 摆动库波形 + 改摆幅
 uv run welding-sim gmaw.Voc=30.0 run.goldak.t_end=8.0   # 覆盖单个叶子参数
 
 # 批量扫描: 三组工况各跑一次, 图片分别写入各自的输出目录
@@ -131,11 +139,15 @@ uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 | `process/` | **A 类工况** — 电弧功率、焊接速度、干伸长、丝径 (工艺数据库可确定) | `code_default`, `db_p10`, `db_median`, `db_p90` |
 | `material/` | **B 类材料物性** — ρ, cp, k, Tm, γ (手册值) | `carbon_steel`, `stainless_steel`, `cast_iron`, `aluminum` |
 | `solver/` | **C 类数值配置** — 网格 dx、域尺寸、积分终点 (与工艺无关) | `coarse`, `default`, `fine` |
+| `weave/` | **焊枪摆动** (A 类, 仅 `sim`/`sim_3d`) — 波形、摆幅 (峰-峰)、摆频 | `none`, `triangle`, `sine`, `pattern1` |
 | `output/` | 图片输出目录与 dpi | `results`, `per_run` |
 
 要点：
 
-- 默认组合 (`process=code_default material=carbon_steel solver=default`) **精确复现**上面的"典型结果"表。
+- 默认组合 (`process=code_default material=carbon_steel solver=default weave=none`) **精确复现**上面的"典型结果"表。
+- `weave=triangle` 是数据库众数摆动工况（2 Hz × 4 mm 直线摆，87 条焊道）；
+  `weave=pattern1` 的路点**逐字取自摆动库** (`weave_pattern`, pattern_id=1，两侧停留的梯形摆)，
+  其余 20 个波形可按同格式增补。启用摆动后 `GoldakFDM` 自动改用全宽网格。
 - 物理常数在 YAML 中只出现一次：`conf/model/*.yaml` 用 `${material.k}` 之类的插值引用分组；
   派生量由解析器现算 (`${wd.half:}` 直径→半径，`${wd.alpha:}` 热扩散率 `k/(ρ·cp)`)，不会与 `k, ρ, cp` 漂移。
 - `process.arc_power_W: null` 表示"用上游功率"：`welding-sim` 取模块 1 的自调节稳态功率 `P_ss`；
@@ -177,13 +189,13 @@ uv run python project_data/ingest_config_mongo.py --dry-run    # 只打印统计
 [`notebooks/welding_parameter_database_exploration.ipynb`](notebooks/welding_parameter_database_exploration.ipynb)；
 `conf/process/db_*.yaml` 三个工况预设即由该集合的 P10 / 中位 / P90 统计得出。
 
-### `welding_config` — Hydra 配置树留档 (34 文档)
+### `welding_config` — Hydra 配置树留档 (40 文档)
 
 | `doc_type` | 数量 | 内容 |
 |---|---|---|
 | `config_root` | 3 | `sim` / `sim_vi` / `sim_3d` 根配置：原文、`defaults`、入口点 |
-| `config_group` | 21 | 各分组选项（`process/db_median`、`model/gmaw` …）：原文 + 解析后 dict |
-| `config_composed` | 9 | **组合并求值后**的最终配置，按 `(root, process)` 切面 |
+| `config_group` | 25 | 各分组选项（`process/db_median`、`model/gmaw`、`weave/pattern1` …）：原文 + 解析后 dict |
+| `config_composed` | 11 | **组合并求值后**的最终配置，按 `(root, process)` 切面，另含两份摆动工况 |
 | `config_meta` | 1 | 源目录、git 提交、hydra 版本、逐文件 sha256 |
 
 `config_composed` 是这个集合的价值所在：`${material.k}`、`${wd.alpha:...}` 等插值

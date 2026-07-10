@@ -102,6 +102,9 @@ def main(cfg: DictConfig):
     print(f"[4 热源] Q = {Q:.0f} W (来自 {src}), v = {cfg.process.travel_speed_m_s*1e3:.2f} mm/s")
 
     g = instantiate(cfg.goldak, Q=Q)
+    if g.weaving:
+        print(f"[4 摆动] {g.weave.describe()} -> 全宽网格 "
+              f"{g.Nx}x{g.Ny}x{g.Nz} (半对称失效, 计算量约 ×2)")
     g.run(t_end=cfg.run.goldak.t_end, x_start=cfg.run.goldak.x_start)
     L, W, D = g.pool_size()
     print(f"[4 Goldak-FDM] 熔池 长 {L:.1f} / 宽 {W:.1f} / 深 {D:.1f} mm")
@@ -122,24 +125,26 @@ def main(cfg: DictConfig):
         return sorted(set(float(v) for v in vals))
 
     lv = levels(cfg.material.T0, 600, 900, 1273, Tm, 2600)
+    jc = g.j_center                       # 半模型=0 (对称面); 全宽摆动模型=中心线
     c0 = a4[0].contourf(g.x*1e3, g.y*1e3, g.T[:, :, 0].T, levels=lv,
                         cmap="hot")
     a4[0].contour(g.x*1e3, g.y*1e3, g.T[:, :, 0].T, levels=[Tm],
                   colors="cyan")
-    a4[0].set_title("Top view T (half model)")
+    a4[0].set_title("Top view T (half model)" if g.symmetric
+                    else "Top view T (full width, weaving)")
     a4[0].set_xlabel("x [mm]"); a4[0].set_ylabel("y [mm]")
     fig4.colorbar(c0, ax=a4[0])
-    c1 = a4[1].contourf(g.x*1e3, -g.z*1e3, g.T[:, 0, :].T, levels=lv,
+    c1 = a4[1].contourf(g.x*1e3, -g.z*1e3, g.T[:, jc, :].T, levels=lv,
                         cmap="hot")
-    a4[1].contour(g.x*1e3, -g.z*1e3, g.T[:, 0, :].T, levels=[Tm],
+    a4[1].contour(g.x*1e3, -g.z*1e3, g.T[:, jc, :].T, levels=[Tm],
                   colors="cyan")
     a4[1].set_title("Longitudinal section")
     a4[1].set_xlabel("x [mm]"); a4[1].set_ylabel("z [mm]")
     fig4.colorbar(c1, ax=a4[1])
-    c2 = a4[2].contourf(g.x*1e3, -g.z*1e3, g.peak[:, 0, :].T,
+    c2 = a4[2].contourf(g.x*1e3, -g.z*1e3, g.peak[:, jc, :].T,
                         levels=levels(cfg.material.T0, 773, 1073, 1273, Tm, 3000),
                         cmap="inferno")
-    a4[2].contour(g.x*1e3, -g.z*1e3, g.peak[:, 0, :].T,
+    a4[2].contour(g.x*1e3, -g.z*1e3, g.peak[:, jc, :].T,
                   levels=levels(1273, Tm), colors=["lime", "cyan"][:len(levels(1273, Tm))])
     a4[2].set_title("Peak T: fusion zone & HAZ")
     a4[2].set_xlabel("x [mm]")
