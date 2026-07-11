@@ -11,6 +11,7 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
+import sys
 import time
 import numpy as np
 
@@ -44,7 +45,9 @@ def ensure_display():
     内联渲染与离屏截图等所有 PyVista 渲染路径之前。
     """
     global _XVFB_PROC
-    if os.name != "posix":
+    # 非 posix (Windows) 或 macOS: VTK 分别走 Win32/Cocoa 原生 GL 上下文, 不需要
+    # X 显示。Xvfb 探测/拉起仅对 Linux (GLX 的 vtk wheel) 有意义。
+    if os.name != "posix" or sys.platform == "darwin":
         return os.environ.get("DISPLAY")
     cur = os.environ.get("DISPLAY", "")
     if cur and _display_works(cur):
