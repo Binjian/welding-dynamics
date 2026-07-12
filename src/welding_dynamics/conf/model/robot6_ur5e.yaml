@@ -1,0 +1,16 @@
+# 模块 7b 变体: Universal Robots UR5e (额定 reach 850 mm / 负载 5 kg)
+# 选型依据: 与默认球腕臂的臂展 (~850 mm) 一致, 焊缝布置无需改动。
+# DH 表与连杆质量取自 UR 官方 "DH parameters for calculations of
+# kinematics and dynamics" (标准 DH, 偏置腕 — 腕轴不交于一点);
+# r_link / J_rotor 仍为本模型的近似 (圆柱惯量 + 折算转子惯量), 非 UR 数据。
+#
+#   uv run welding-sim-vi model@robot6=robot6_ur5e
+_target_: welding_dynamics.robot_vi.SixDofArm
+m: [3.761, 8.058, 2.846, 1.37, 1.3, 0.365]   # kg  UR5e 连杆质量
+r_link: 0.045    # m      连杆等效圆柱半径 (近似)
+J_rotor: 0.03    # kg·m²  折算电机/减速器惯量 (近似)
+g: 9.81          # m/s^2
+# 标准 DH (theta 为关节变量): alpha [90, 0, 0, 90, -90, 0]°
+dh_d: [0.1625, 0.0, 0.0, 0.1333, 0.0997, 0.0996]   # m
+dh_a: [0.0, -0.425, -0.3922, 0.0, 0.0, 0.0]        # m
+dh_alpha_deg: [90.0, 0.0, 0.0, 90.0, -90.0, 0.0]

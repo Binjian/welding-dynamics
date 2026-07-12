@@ -124,9 +124,9 @@ class TwoLinkArm:
 
 
 class SixDofArm:
-    """空间 6R 焊接机械臂 (球腕) — 全六自由度扩展。
+    """空间 6R 焊接机械臂 — 全六自由度扩展。
 
-    标准 DH (肩侧偏 a1, 大臂 a2, 肘偏 a3, 小臂 d4, 焊枪 d6):
+    默认几何为球腕 (肩侧偏 a1, 大臂 a2, 肘偏 a3, 小臂 d4, 焊枪 d6):
 
         i | theta |  d  |  a  | alpha
         1 |  q1   | d1  | a1  | +90°
@@ -135,6 +135,11 @@ class SixDofArm:
         4 |  q4   | d4  |  0  | -90°
         5 |  q5   |  0  |  0  | +90°
         6 |  q6   | d6  |  0  |   0
+
+    也可经 ``dh_d / dh_a / dh_alpha_deg`` (各 6 元) 传入**任意标准 DH 表**,
+    覆盖上面的参数化几何 — 例如偏置腕的 UR 系列 (conf 里的
+    ``model/robot6_ur5e``)。动力学 (质心 Jacobian 装配)、DLS 位姿逆解、
+    轨迹跟踪全是数值方法, 不依赖球腕解耦。
 
     连杆 i 建模为端点 [o_{i-1}, o_i] 间的实心圆柱 (半径 r_link):
     轴向转动惯量 ½mr² 保证腕部滚转自由度 (q4/q6, 转轴穿过连杆轴线)
@@ -150,14 +155,21 @@ class SixDofArm:
 
     def __init__(self, m=(6.0, 4.0, 2.5, 1.5, 1.0, 0.5), r_link=0.04,
                  J_rotor=0.03, d1=0.40, a1=0.05, a2=0.40, a3=0.05,
-                 d4=0.35, d6=0.10, g=9.81):
+                 d4=0.35, d6=0.10, g=9.81,
+                 dh_d=None, dh_a=None, dh_alpha_deg=None):
         self.m = np.asarray(m, float)
         self.r_link, self.g = float(r_link), float(g)
         self.J_rotor = np.broadcast_to(np.asarray(J_rotor, float), (6,)).copy()
-        # 标准 DH 表 (theta 为关节变量)
-        self.dh_d = np.array([d1, 0.0, 0.0, d4, 0.0, d6])
-        self.dh_a = np.array([a1, a2, a3, 0.0, 0.0, 0.0])
-        self.dh_alpha = np.deg2rad([90.0, 0.0, 90.0, -90.0, 90.0, 0.0])
+        # 标准 DH 表 (theta 为关节变量); 显式表优先于参数化球腕几何
+        self.dh_d = (np.array([d1, 0.0, 0.0, d4, 0.0, d6])
+                     if dh_d is None else np.asarray(dh_d, float))
+        self.dh_a = (np.array([a1, a2, a3, 0.0, 0.0, 0.0])
+                     if dh_a is None else np.asarray(dh_a, float))
+        self.dh_alpha = np.deg2rad([90.0, 0.0, 90.0, -90.0, 90.0, 0.0]
+                                   if dh_alpha_deg is None else dh_alpha_deg)
+        if not (self.dh_d.shape == self.dh_a.shape
+                == self.dh_alpha.shape == (6,)):
+            raise ValueError("dh_d / dh_a / dh_alpha_deg 必须各为 6 元")
         self._ca, self._sa = np.cos(self.dh_alpha), np.sin(self.dh_alpha)
         self._tril = np.tril(np.ones((6, 6)))[:, :, None]   # j<=i 掩码
 
