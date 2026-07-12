@@ -306,29 +306,28 @@ class SixDofArm:
         return (t_vi[2:-2], np.abs(E_vi/E0 - 1),
                 t_rk, np.abs(E_rk/E0 - 1))
 
-    # ---------------- 演示 B: 三维焊缝跟踪 (强迫 DEL) ----------------
-    def seam_tracking(self, p_start=(0.45, -0.15, 0.20),
-                      p_end=(0.45, 0.15, 0.35), t_weld=4.0, h=0.01,
-                      wn=12.0, zeta=1.0):
-        """焊枪尖沿三维直线焊缝, 姿态保持平焊 (枪尖竖直向下)。
+    # ---------------- 演示 B: 三维轨迹跟踪 (强迫 DEL) ----------------
+    def track_path(self, p_ref_fun, t_end, h=0.01, wn=12.0, zeta=1.0,
+                   R_ref=None, q_seed=(0.0, 0.6, 0.5, 0.0, 0.9, 0.0)):
+        """焊枪尖跟踪任意三维参考轨迹 p_ref_fun(t) -> (3,) [m]。
 
-        关节 PD 增益按名义构型的 M(q) 对角元逐关节整定
-        (Kp_i = wn² M_ii, Kd_i = 2 ζ wn M_ii) — 统一标量增益会让
-        轻惯量的腕关节刚度过高, 力矩控制病态。
+        姿态保持 R_ref (默认平焊: 枪尖竖直向下), 参考关节轨迹由位姿
+        DLS 逆解连续化 (按上一解热启动)。关节 PD 增益按名义构型的
+        M(q) 对角元逐关节整定 (Kp_i = wn² M_ii, Kd_i = 2 ζ wn M_ii) —
+        统一标量增益会让轻惯量的腕关节刚度过高, 力矩控制病态。
+        返回 (t, tip, ref, err): 实际枪尖 / 参考位置 / 逐点误差。
         """
-        p0, p1 = np.array(p_start, float), np.array(p_end, float)
-        R_ref = np.diag([1.0, -1.0, -1.0])        # 焊枪 z 轴 = -z_world (平焊)
-
-        seed = self.ik(p0, R_ref, q0=(0.0, 0.6, 0.5, 0.0, 0.9, 0.0))
+        if R_ref is None:
+            R_ref = np.diag([1.0, -1.0, -1.0])    # 焊枪 z 轴 = -z_world (平焊)
+        seed = self.ik(np.asarray(p_ref_fun(0.0), float), R_ref, q0=q_seed)
         cache = {0.0: seed}
         state = {"q_last": seed}
 
         def q_ref(t):
             qc = cache.get(t)
             if qc is None:
-                sgm = np.clip(t/t_weld, 0, 1)
-                sgm = 3*sgm**2 - 2*sgm**3         # 平滑 S 曲线
-                qc = self.ik(p0 + sgm*(p1 - p0), R_ref, q0=state["q_last"])
+                qc = self.ik(np.asarray(p_ref_fun(t), float), R_ref,
+                             q0=state["q_last"])
                 cache[t] = qc
             state["q_last"] = qc
             return qc
@@ -346,9 +345,22 @@ class SixDofArm:
 
         acc = lambda q, v, t: self.accel(q, v, t, tau(q, v, t))
         vi = MidpointDEL(self.lagrangian, 6, force=tau)
-        t, Q = self._quiet_run(vi, q_ref(0.0), qd_ref(0.0), t_weld + 1.0, h,
+        t, Q = self._quiet_run(vi, q_ref(0.0), qd_ref(0.0), t_end, h,
                                rhs_for_bootstrap=acc)
         tip = np.array([self.fk_tip(qk) for qk in Q])
         ref = np.array([self.fk_tip(q_ref(tk)) for tk in t])
         err = np.linalg.norm(tip - ref, axis=1)
         return t, tip, ref, err
+
+    def seam_tracking(self, p_start=(0.45, -0.15, 0.20),
+                      p_end=(0.45, 0.15, 0.35), t_weld=4.0, h=0.01,
+                      wn=12.0, zeta=1.0):
+        """焊枪尖沿三维直线焊缝 (S 曲线速度规划), track_path 的便捷封装。"""
+        p0, p1 = np.array(p_start, float), np.array(p_end, float)
+
+        def p_ref(t):
+            sgm = np.clip(t/t_weld, 0, 1)
+            sgm = 3*sgm**2 - 2*sgm**3             # 平滑 S 曲线
+            return p0 + sgm*(p1 - p0)
+
+        return self.track_path(p_ref, t_weld + 1.0, h=h, wn=wn, zeta=zeta)

@@ -100,3 +100,52 @@ class WaypointWeave(_Weave):
         pid = f"#{self.pattern_id}" if self.pattern_id is not None else "自定义"
         return (f"路点波形 {pid} ({len(self.time_pct)} 点) "
                 f"{self.frequency_Hz:g} Hz × {self.amplitude_m*1e3:g} mm")
+
+
+class RobotExecutedWeave(_Weave):
+    """机器人实际执行的摆动: 由 6DOF 机械臂跟踪仿真的 TCP 轨迹采样构成。
+
+    与解析摆动 (指令波形) 不同, 这里的 (dx, dy) 是**实际枪尖**相对
+    无摆动匀速中心线的偏差采样序列 — 含指令摆动加上跟踪滞后、幅值
+    衰减与换向超调。把机器人执行结果注入 GoldakFDM 即可比较
+    "理想摆动 vs 机器人执行摆动" 的熔池差异。
+
+    - ``amplitude_m`` 取实际横向行程的峰-峰值 (>0 时 GoldakFDM 自动
+      切换全宽网格), 不再是指令幅值;
+    - 采样范围之外按端点保持 (np.interp 的钳位行为);
+    - ``from_tracking`` 假定焊缝沿机器人基座 x 轴、恒速 v:
+      dx = tip_x - (p0_x + v t), dy = tip_y - p0_y。
+    """
+
+    def __init__(self, t, dx, dy, frequency_Hz=0.0, label="机器人执行"):
+        t = np.asarray(t, float)
+        dx = np.asarray(dx, float)
+        dy = np.asarray(dy, float)
+        if not (t.size == dx.size == dy.size) or t.size < 2:
+            raise ValueError("t / dx / dy 长度必须一致且 >= 2")
+        if np.any(np.diff(t) <= 0):
+            raise ValueError("t 必须严格递增")
+        self._t, self._dx, self._dy = t, dx, dy
+        self.amplitude_m = float(np.ptp(dy))
+        self.frequency_Hz = float(frequency_Hz)
+        self.label = label
+
+    @classmethod
+    def from_tracking(cls, t, tip, p0, v, frequency_Hz=0.0, label="机器人执行"):
+        """由 SixDofArm.track_path 的 (t, tip) 构造 (焊缝沿基座 x 轴)。
+
+        p0: 焊缝起点 [m]; v: 焊接速度 [m/s] (与 GoldakFDM 的 v 一致,
+        参考中心线为 p0 + v t x̂)。"""
+        t = np.asarray(t, float)
+        tip = np.asarray(tip, float)
+        p0 = np.asarray(p0, float)
+        return cls(t, tip[:, 0] - (p0[0] + v*t), tip[:, 1] - p0[1],
+                   frequency_Hz=frequency_Hz, label=label)
+
+    def offset(self, t):
+        return (float(np.interp(t, self._t, self._dx)),
+                float(np.interp(t, self._t, self._dy)))
+
+    def describe(self):
+        return (f"{self.label} ({self._t.size} 采样) "
+                f"{self.frequency_Hz:g} Hz × 实际 {self.amplitude_m*1e3:.2f} mm")
