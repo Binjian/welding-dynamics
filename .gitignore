@@ -5,3 +5,6 @@ __pycache__/
 results/openfoam_case/
 results/runs/
 results/multirun/
+
+# MuJoCo 在 CWD 写的警告日志 (notebook 的发散演示格会再生)
+MUJOCO_LOG.TXT
