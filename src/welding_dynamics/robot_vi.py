@@ -319,15 +319,13 @@ class SixDofArm:
                 t_rk, np.abs(E_rk/E0 - 1))
 
     # ---------------- 演示 B: 三维轨迹跟踪 (强迫 DEL) ----------------
-    def track_path(self, p_ref_fun, t_end, h=0.01, wn=12.0, zeta=1.0,
-                   R_ref=None, q_seed=(0.0, 0.6, 0.5, 0.0, 0.9, 0.0)):
-        """焊枪尖跟踪任意三维参考轨迹 p_ref_fun(t) -> (3,) [m]。
+    def _pd_tracking_law(self, p_ref_fun, wn, zeta, R_ref, q_seed):
+        """位姿 IK 参考 + 逐关节 PD + 重力补偿 — VI 与 MuJoCo 后端共用。
 
-        姿态保持 R_ref (默认平焊: 枪尖竖直向下), 参考关节轨迹由位姿
-        DLS 逆解连续化 (按上一解热启动)。关节 PD 增益按名义构型的
-        M(q) 对角元逐关节整定 (Kp_i = wn² M_ii, Kd_i = 2 ζ wn M_ii) —
-        统一标量增益会让轻惯量的腕关节刚度过高, 力矩控制病态。
-        返回 (t, tip, ref, err): 实际枪尖 / 参考位置 / 逐点误差。
+        参考关节轨迹由位姿 DLS 逆解连续化 (按上一解热启动); PD 增益按
+        名义构型的 M(q) 对角元逐关节整定 (Kp_i = wn² M_ii,
+        Kd_i = 2 ζ wn M_ii) — 统一标量增益会让轻惯量的腕关节刚度过高,
+        力矩控制病态。返回 (q_ref, qd_ref, tau) 三个闭包。
         """
         if R_ref is None:
             R_ref = np.diag([1.0, -1.0, -1.0])    # 焊枪 z 轴 = -z_world (平焊)
@@ -355,6 +353,18 @@ class SixDofArm:
             return (Kp*(q_ref(t) - q) + Kd*(qd_ref(t) - v)
                     + self.gravity_comp(q))
 
+        return q_ref, qd_ref, tau
+
+    def track_path(self, p_ref_fun, t_end, h=0.01, wn=12.0, zeta=1.0,
+                   R_ref=None, q_seed=(0.0, 0.6, 0.5, 0.0, 0.9, 0.0)):
+        """焊枪尖跟踪任意三维参考轨迹 p_ref_fun(t) -> (3,) [m]。
+
+        姿态保持 R_ref (默认平焊: 枪尖竖直向下), 力矩律见
+        _pd_tracking_law。返回 (t, tip, ref, err):
+        实际枪尖 / 参考位置 / 逐点误差。
+        """
+        q_ref, qd_ref, tau = self._pd_tracking_law(
+            p_ref_fun, wn, zeta, R_ref, q_seed)
         acc = lambda q, v, t: self.accel(q, v, t, tau(q, v, t))
         vi = MidpointDEL(self.lagrangian, 6, force=tau)
         t, Q = self._quiet_run(vi, q_ref(0.0), qd_ref(0.0), t_end, h,

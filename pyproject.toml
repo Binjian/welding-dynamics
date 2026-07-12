@@ -34,6 +34,11 @@ notebook = [
     "trame-vtk>=2.8.15",
     "trame-vuetify>=2.9.0",
 ]
+# 模块 7b 的 MuJoCo 多体动力学后端 (robot_mujoco.py): `uv sync --extra mujoco`。
+# SixDofArm/变分积分器本身不需要本组 — MuJoCo 仅在 MujocoArm 内延迟导入。
+mujoco = [
+    "mujoco>=3.1",
+]
 
 [project.scripts]
 welding-sim = "welding_dynamics.main:main"
