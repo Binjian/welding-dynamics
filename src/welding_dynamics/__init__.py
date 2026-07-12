@@ -9,7 +9,7 @@ from .marangoni import (EffectiveMarangoniCorrection, SurfaceMarangoniFlow2D,
 from .variational import ForcedVerlet, MidpointDEL
 from .droplet_vi import DropletOscillatorVI
 from .robot_vi import TwoLinkArm, SixDofArm
-from .robot_mujoco import MujocoArm, build_mjcf
+from .robot_mujoco import MujocoArm, MujocoWarpArm, build_mjcf
 from .shortcircuit_vi import ContactCycleVI
 from .thermal3d import OpenFOAMExporter, export_openfoam, render, ensure_display
 
@@ -20,5 +20,5 @@ __all__ = ["GMAWDynamics", "RosenthalThermal", "GoldakFDM",
            "EffectiveMarangoniCorrection", "SurfaceMarangoniFlow2D",
            "IncompressibleMarangoniFlow2D",
            "ForcedVerlet", "MidpointDEL", "DropletOscillatorVI",
-           "TwoLinkArm", "SixDofArm", "MujocoArm", "build_mjcf", "ContactCycleVI",
+           "TwoLinkArm", "SixDofArm", "MujocoArm", "MujocoWarpArm", "build_mjcf", "ContactCycleVI",
            "OpenFOAMExporter", "export_openfoam", "render", "ensure_display"]

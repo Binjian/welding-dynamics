@@ -175,3 +175,109 @@ class MujocoArm:
         """交互式查看模型 (阻塞, 需本地显示): mujoco.viewer.launch。"""
         from mujoco import viewer
         viewer.launch(self.model, self.data)
+
+
+class MujocoWarpArm:
+    """SixDofArm 的 MuJoCo Warp 批量后端 (可选依赖 mujoco-warp)。
+
+    与 MujocoArm 完全同一 MJCF (build_mjcf 单参数源), 但由 NVIDIA Warp
+    内核对 ``nworld`` 个世界**同步批量**积分: 有 CUDA GPU 时可上千世界
+    并行 (参数扫描 / 蒙特卡洛 / 强化学习式 rollout), 无 GPU 时自动落到
+    Warp 的 CPU 设备 — 功能与数值等价, 只是失去大规模并行吞吐。
+    构造后 ``self.device`` 报告实际设备 ("cuda"/"cpu")。
+
+    注意事项:
+
+    - mjwarp 以 **float32** 计算 (C-MuJoCo 为 float64): 短程轨迹差
+      ~1e-6, 混沌轨迹长程会指数放大 — 参数扫描/统计用途不受影响,
+      但不要拿它做长时能量保真结论 (那是变分积分器的地盘);
+    - 物理步长在构造时经 MJCF 固定 (timestep), 不像 MujocoArm 可在
+      rollout 时覆盖;
+    - 力矩律仍在 CPU 上逐世界求值 (track_batch 的 tau_funs), 物理步
+      批量执行 — 控制器求值是 CPU⇄设备同步点, GPU 上想要满吞吐需把
+      控制也写成 Warp 内核 (超出本包范围)。
+    """
+
+    def __init__(self, arm, nworld=1, timestep=1e-3, integrator="Euler",
+                 damping=0.0, frictionloss=0.0):
+        import mujoco
+        import warp as wp                          # 可选依赖, 延迟导入
+        import mujoco_warp as mjw
+        wp.init()
+        self._wp, self._mjw = wp, mjw
+        self.arm, self.nworld = arm, int(nworld)
+        self.timestep = float(timestep)
+        self.xml = build_mjcf(arm, timestep=timestep, integrator=integrator,
+                              damping=damping, frictionloss=frictionloss)
+        self.mjm = mujoco.MjModel.from_xml_string(self.xml)
+        self.model = mjw.put_model(self.mjm)
+        self.data = mjw.put_data(self.mjm, mujoco.MjData(self.mjm),
+                                 nworld=self.nworld)
+        self._tcp = self.mjm.site("tcp").id
+        self.device = "cuda" if wp.get_cuda_device_count() > 0 else "cpu"
+
+    # ---------------- 批量状态读写 ----------------
+    def _write(self, dst, src):
+        wp = self._wp
+        wp.copy(dst, wp.array(np.asarray(src), dtype=dst.dtype,
+                              device=dst.device))
+
+    def set_state(self, q0, v0=None):
+        """写入各世界状态 (可广播: 单个 q0 -> 所有世界) 并 forward。"""
+        q0 = np.broadcast_to(np.asarray(q0, float), (self.nworld, 6))
+        v0 = (np.zeros((self.nworld, 6)) if v0 is None
+              else np.broadcast_to(np.asarray(v0, float), (self.nworld, 6)))
+        self._write(self.data.qpos, q0)
+        self._write(self.data.qvel, v0)
+        self._mjw.forward(self.model, self.data)
+
+    def tip(self):
+        """各世界当前 TCP 位置 (nworld, 3)。"""
+        return self.data.site_xpos.numpy()[:, self._tcp].astype(float)
+
+    # ---------------- 批量无驱动滚转 ----------------
+    def passive_rollout_batch(self, q0_batch, t_end):
+        """无驱动批量摆动: 返回 (t, Q, V, E), 形状 (nworld, n+1, ...)。
+
+        能量用 SixDofArm.energy 统一度量 (float64 上转)。
+        """
+        mjw, m, d = self._mjw, self.model, self.data
+        n = int(round(t_end/self.timestep))
+        self.set_state(q0_batch)
+        Q = np.zeros((self.nworld, n + 1, 6))
+        V = np.zeros_like(Q)
+        Q[:, 0] = d.qpos.numpy()
+        for k in range(n):
+            mjw.step(m, d)
+            Q[:, k+1] = d.qpos.numpy()
+            V[:, k+1] = d.qvel.numpy()
+        E = np.array([[self.arm.energy(Q[w, k], V[w, k])
+                       for k in range(n + 1)] for w in range(self.nworld)])
+        return self.timestep*np.arange(n + 1), Q, V, E
+
+    # ---------------- 批量轨迹跟踪 ----------------
+    def track_batch(self, tau_funs, q0, v0, t_end, h_ctrl=0.01):
+        """批量跟踪: 每个世界一个力矩律 ``tau_funs[i](q, v, t)``。
+
+        q0/v0 (nworld, 6) 为各世界初始状态; 力矩在控制周期 h_ctrl 内
+        零阶保持 (CPU 逐世界求值), 物理步批量执行。
+        返回 (t, tip): tip 形状 (nworld, n+1, 3)。
+        """
+        if len(tau_funs) != self.nworld:
+            raise ValueError(f"需要 {self.nworld} 个力矩律, 得到 {len(tau_funs)}")
+        mjw, m, d = self._mjw, self.model, self.data
+        sub = max(1, int(round(h_ctrl/self.timestep)))
+        n = int(round(t_end/h_ctrl))
+        self.set_state(q0, v0)
+        tip = np.zeros((self.nworld, n + 1, 3))
+        tip[:, 0] = self.tip()
+        for k in range(n):
+            qs = d.qpos.numpy().astype(float)
+            vs = d.qvel.numpy().astype(float)
+            tau = np.stack([f(qs[w], vs[w], k*h_ctrl)
+                            for w, f in enumerate(tau_funs)])
+            self._write(d.qfrc_applied, tau)
+            for _ in range(sub):
+                mjw.step(m, d)
+            tip[:, k+1] = self.tip()
+        return h_ctrl*np.arange(n + 1), tip

@@ -39,6 +39,11 @@ notebook = [
 mujoco = [
     "mujoco>=3.1",
 ]
+# MuJoCo Warp 批量世界后端 (MujocoWarpArm): `uv sync --extra warp`。
+# 有 CUDA GPU 时上千世界并行; 无 GPU 落到 Warp CPU 设备 (功能等价)。
+warp = [
+    "mujoco-warp>=3.10",
+]
 
 [project.scripts]
 welding-sim = "welding_dynamics.main:main"
