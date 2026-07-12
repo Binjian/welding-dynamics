@@ -210,7 +210,10 @@ class MujocoWarpArm:
         self.xml = build_mjcf(arm, timestep=timestep, integrator=integrator,
                               damping=damping, frictionloss=frictionloss)
         self.mjm = mujoco.MjModel.from_xml_string(self.xml)
-        self.model = mjw.put_model(self.mjm)
+        # 关节损耗字段按世界展开 (域随机化): 初值为 MJCF 标量的复制
+        self.model = mjw.put_model(
+            self.mjm, batch_sizes={"dof_damping": self.nworld,
+                                   "dof_frictionloss": self.nworld})
         self.data = mjw.put_data(self.mjm, mujoco.MjData(self.mjm),
                                  nworld=self.nworld)
         self._tcp = self.mjm.site("tcp").id
@@ -221,6 +224,21 @@ class MujocoWarpArm:
         wp = self._wp
         wp.copy(dst, wp.array(np.asarray(src), dtype=dst.dtype,
                               device=dst.device))
+
+    def set_joint_losses(self, damping=None, frictionloss=None):
+        """逐世界设定关节粘滞阻尼 / 库仑摩擦 (域随机化)。
+
+        形状可广播: 标量 / (nworld,) 每世界同值 / (nworld, 6) 逐关节;
+        None = 保持现值。模型损耗字段在构造时已按世界展开。
+        """
+        for val, field in ((damping, self.model.dof_damping),
+                           (frictionloss, self.model.dof_frictionloss)):
+            if val is None:
+                continue
+            arr = np.asarray(val, float)
+            if arr.ndim == 1:
+                arr = arr[:, None]
+            self._write(field, np.broadcast_to(arr, (self.nworld, 6)))
 
     def set_state(self, q0, v0=None):
         """写入各世界状态 (可广播: 单个 q0 -> 所有世界) 并 forward。"""
