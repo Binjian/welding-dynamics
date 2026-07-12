@@ -1,13 +1,15 @@
-# welding-sim-vi — 模块 6/7/8 (变分/几何积分器)
+# welding-sim-vi — 模块 6/7/7b/8 (变分/几何积分器)
 #
 #   uv run welding-sim-vi
 #   uv run welding-sim-vi material=aluminum            # 熔滴共振频率随 gamma/rho 变化
 #   uv run welding-sim-vi run.robot.passive_h=0.04     # 加大步长, 看能量误差是否仍有界
+#   uv run welding-sim-vi run.robot6.passive_t_end=20  # 赶时间: 缩短 6DOF 段 (默认约 1 min)
 defaults:
   - material: carbon_steel
   - output: results
   - model@droplet_vi: droplet_vi
   - model@robot: robot
+  - model@robot6: robot6
   - model@contact: contact
   - _self_
 
@@ -32,6 +34,17 @@ run:
       h: 0.01
       Kp: 120.0
       Kd: 24.0
+  robot6:                        # 6DOF 隐式 DEL 较重: 默认参数约 1 min
+    q0: [0.0, 1.2, -1.0, 0.8, 1.2, 0.0]   # rad  大摆幅初始构型 (甩腕混沌)
+    passive_t_end: 60.0          # s   无驱动摆动时长
+    passive_h: 0.03              # s
+    seam:
+      p_start: [0.45, -0.15, 0.20]   # m  三维直线焊缝 (工作空间中心区)
+      p_end: [0.45, 0.15, 0.35]
+      t_weld: 4.0                # s
+      h: 0.01
+      wn: 12.0                   # rad/s 关节 PD 带宽 (Kp_i = wn^2 M_ii)
+      zeta: 1.0                  # -     阻尼比 (Kd_i = 2 zeta wn M_ii)
   contact:
     cycle_t_end: 0.06          # s   CMT 循环仿真时长
     bounce_e: 0.85             # -   弹性反冲基准的恢复系数

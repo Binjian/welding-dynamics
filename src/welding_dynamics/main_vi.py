@@ -112,6 +112,49 @@ def main(cfg: DictConfig):
     fig7.suptitle("Module 7: welding-robot 2-link arm, variational integrator")
     fig7.tight_layout(); fig7.savefig(OUT/"m7_robot_vi.png", dpi=dpi)
 
+    # ============ 模块 7b: 六自由度机械臂 ============
+    r6 = cfg.run.robot6
+    arm6 = instantiate(cfg.robot6)
+    tv6, ev6, tr6, er6 = arm6.passive_compare(
+        q0=tuple(r6.q0), t_end=r6.passive_t_end, h=r6.passive_h)
+    print(f"[7b 6DOF-VI] {r6.passive_t_end:.0f} s 无驱动摆动 "
+          f"(h={r6.passive_h*1e3:.0f} ms, 数值装配 M(q), 无解析动力学): "
+          f"VI 能量误差有界 max {ev6.max():.2e} | RK4 漂移至 {er6[-1]:.2e}")
+
+    s6 = r6.seam
+    ts6, tip6, ref6, err6 = arm6.seam_tracking(
+        p_start=tuple(s6.p_start), p_end=tuple(s6.p_end),
+        t_weld=s6.t_weld, h=s6.h, wn=s6.wn, zeta=s6.zeta)
+    print(f"[7b 6DOF-VI] 三维焊缝跟踪 (位姿 IK + 逐关节 PD): "
+          f"RMS 误差 = {1e3*np.sqrt((err6**2).mean()):.2f} mm, "
+          f"max = {1e3*err6.max():.2f} mm")
+
+    fig7b = plt.figure(figsize=(12, 4.6))
+    b0 = fig7b.add_subplot(1, 2, 1)
+    b0.semilogy(tv6, np.maximum(ev6, 1e-12), label="Variational (midpoint DEL)")
+    b0.semilogy(tr6, np.maximum(er6, 1e-12), label="RK4 (same h)")
+    b0.set_xlabel("t [s]"); b0.set_ylabel("|E/E0 - 1|")
+    b0.set_title(f"Passive swing energy error, {r6.passive_t_end:.0f} s, "
+                 f"h = {r6.passive_h*1e3:.0f} ms")
+    b0.legend(); b0.grid(alpha=0.3)
+    b1 = fig7b.add_subplot(1, 2, 2, projection="3d")
+    b1.plot(ref6[:, 0]*1e3, ref6[:, 1]*1e3, ref6[:, 2]*1e3,
+            "k--", lw=1.5, label="weld seam")
+    b1.plot(tip6[:, 0]*1e3, tip6[:, 1]*1e3, tip6[:, 2]*1e3,
+            "r", lw=1, label="torch tip (forced DEL)")
+    b1.set_xlabel("x [mm]"); b1.set_ylabel("y [mm]"); b1.set_zlabel("z [mm]")
+    b1.set_title("3D seam tracking (pose IK + per-joint PD)")
+    b1.legend()
+    # 三轴等比例: 否则自动缩放会把 ~0.4 mm 的 x 向偏差拉满整轴, 视觉失真
+    mid = 0.5*(ref6.min(axis=0) + ref6.max(axis=0))*1e3
+    half = 0.55*(ref6.max(axis=0) - ref6.min(axis=0)).max()*1e3
+    b1.set_xlim(mid[0]-half, mid[0]+half)
+    b1.set_ylim(mid[1]-half, mid[1]+half)
+    b1.set_zlim(mid[2]-half, mid[2]+half)
+    fig7b.suptitle("Module 7b: 6-DOF welding robot (spherical wrist), "
+                   "variational integrator")
+    fig7b.tight_layout(); fig7b.savefig(OUT/"m7b_robot6_vi.png", dpi=dpi)
+
     # ============ 模块 8: 非光滑接触 ============
     rc = cfg.run.contact
     cc = instantiate(cfg.contact)
