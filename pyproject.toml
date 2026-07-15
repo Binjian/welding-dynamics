@@ -17,6 +17,7 @@ dependencies = [
     "pandas>=2.3.3",
     "openpyxl>=3.1.5",
     "pymongo>=4.17.0",
+    "pyvista[jupyter]>=0.48.4",
 ]
 
 [project.optional-dependencies]
