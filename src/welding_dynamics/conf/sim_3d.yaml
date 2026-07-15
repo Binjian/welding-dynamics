@@ -9,6 +9,7 @@ defaults:
   - material: carbon_steel
   - solver: default
   - weave: none
+  - convection: none
   - output: results
   - model@goldak: goldak
   - _self_

@@ -31,13 +31,21 @@ class GoldakFDM:
       (y ∈ [-Ly, Ly], Ny = 2*Ly/dx - 1, y=0 落在单元中心), 计算量约翻倍。
 
     ``Ly`` 始终是**半宽** (自焊缝中心线到远场边界的距离)。
+
+    熔池对流 (模块 10A 耦合, docs/melt_convection_assessment.md 方案 A):
+    - ``convection=None`` (默认): 纯传导, 常系数扩散, 逐位复现 README 结果。
+    - ``convection`` 给定 (``EffectiveMarangoniCorrection`` 对象): 池内导热率
+      放大 ``alpha_eff()/alpha`` 倍 (糊状区线性过渡), 扩散项改为变系数通量
+      形式 (面上调和平均, 保持能量守恒); dt 随最大扩散率缩小, 步数约 ×倍率。
     """
+
+    MUSHY_DT = 100.0    # K  固相 k -> 池内 k_eff 的线性过渡温度宽度 (糊状区)
 
     def __init__(self, Q=8200.0, eta=0.8, v=8e-3,
                  a=4e-3, b=4e-3, cf=4e-3, cr=9e-3, ff=0.6,
                  Lx=0.10, Ly=0.025, Lz=0.020, dx=1.25e-3,
                  rho=7850.0, cp=600.0, k=41.0, T0=298.0, Tm=1773.0,
-                 weave=None):
+                 weave=None, convection=None):
         self.Q, self.eta, self.v = Q, eta, v
         self.a, self.b, self.cf, self.cr = a, b, cf, cr
         self.ff, self.fr = ff, 2.0 - ff
@@ -49,6 +57,22 @@ class GoldakFDM:
         self.weaving = bool(weave) and getattr(weave, "amplitude_m", 0.0) > 0
         self.weave = weave if self.weaving else None
         self.symmetric = not self.weaving
+
+        # 空 dict/None 一律视为无对流 (Hydra 的 convection=none 组合出空节点)。
+        # 注意 EffectiveMarangoniCorrection 是 dataclass: 经 instantiate 的
+        # kwarg 覆盖传入时会被 OmegaConf 重新结构化成 mapping, 这里还原。
+        if bool(convection) and not hasattr(convection, "alpha_eff") \
+                and hasattr(convection, "keys"):
+            from .marangoni import EffectiveMarangoniCorrection
+            convection = EffectiveMarangoniCorrection(
+                **{k: v for k, v in dict(convection).items()
+                   if not k.startswith("_")})
+        if bool(convection) and hasattr(convection, "alpha_eff"):
+            self.k_pool_mult = float(convection.alpha_eff() / convection.alpha)
+        else:
+            self.k_pool_mult = 1.0
+        self.convecting = self.k_pool_mult > 1.0
+        self.convection = convection if self.convecting else None
 
         self.Nx, self.Nz = int(Lx/dx), int(Lz/dx)
         ny_half = int(Ly/dx)
@@ -83,8 +107,33 @@ class GoldakFDM:
         return coef * np.exp(-3*(xi/c)**2 - 3*(yi/self.a)**2
                              - 3*(self.Z/self.b)**2)
 
+    def _kappa(self, T):
+        """相对导热率场: 固相 1, 池内 k_pool_mult, 糊状区线性过渡。"""
+        return 1.0 + (self.k_pool_mult - 1.0) * np.clip(
+            (T - (self.Tm - self.MUSHY_DT)) / self.MUSHY_DT, 0.0, 1.0)
+
+    def _var_k_div(self, T):
+        """变系数扩散: Σ_faces κ_face·(T_nb - T), 面上取调和平均 (通量守恒)。
+
+        κ=1 处处成立时退化为标准 6 点 Laplacian。edge-pad 与常系数路径一致,
+        即所有外边界零通量; 远场 Dirichlet 仍由 run() 事后覆盖。
+        """
+        K = self._kappa(T)
+        Tp = np.pad(T, 1, mode="edge")
+        Kp = np.pad(K, 1, mode="edge")
+        div = np.zeros_like(T)
+        core = (slice(1, -1),) * 3
+        for ax in range(3):
+            for lo in (False, True):
+                idx = list(core)
+                idx[ax] = slice(None, -2) if lo else slice(2, None)
+                Tn, Kn = Tp[tuple(idx)], Kp[tuple(idx)]
+                div += 2.0*Kn*K/(Kn + K) * (Tn - T)
+        return div
+
     def run(self, t_end=5.0, x_start=0.015):
-        dt = 0.4 * self.dx**2 / (6 * self.alpha)      # 显式稳定性
+        # 显式稳定性; 对流增强时按池内最大扩散率缩小 dt
+        dt = 0.4 * self.dx**2 / (6 * self.alpha * self.k_pool_mult)
         n_steps = int(t_end / dt)
         T, dx2 = self.T, self.dx**2
         peak = np.full_like(T, self.T0)               # 记录峰值温度
@@ -98,11 +147,15 @@ class GoldakFDM:
             q = self.goldak_q(xs, ys)
             q *= P_target / max(q.sum() * self.dx**3, 1e-9)  # 数值重归一化
             # edge-pad => 所有边界零通量(Neumann); 半模型下 y=0 即对称面
-            Tp = np.pad(T, 1, mode="edge")
-            lap = (Tp[2:, 1:-1, 1:-1] + Tp[:-2, 1:-1, 1:-1]
-                   + Tp[1:-1, 2:, 1:-1] + Tp[1:-1, :-2, 1:-1]
-                   + Tp[1:-1, 1:-1, 2:] + Tp[1:-1, 1:-1, :-2] - 6*T)
-            T = T + dt*(self.alpha*lap/dx2 + q/(self.rho*self.cp))
+            if self.convecting:
+                T = T + dt*(self.alpha*self._var_k_div(T)/dx2
+                            + q/(self.rho*self.cp))
+            else:
+                Tp = np.pad(T, 1, mode="edge")
+                lap = (Tp[2:, 1:-1, 1:-1] + Tp[:-2, 1:-1, 1:-1]
+                       + Tp[1:-1, 2:, 1:-1] + Tp[1:-1, :-2, 1:-1]
+                       + Tp[1:-1, 1:-1, 2:] + Tp[1:-1, 1:-1, :-2] - 6*T)
+                T = T + dt*(self.alpha*lap/dx2 + q/(self.rho*self.cp))
             # 远场边界 Dirichlet (大件散热)
             T[0] = T[-1] = self.T0
             T[:, -1] = self.T0

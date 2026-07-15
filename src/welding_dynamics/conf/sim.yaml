@@ -11,6 +11,7 @@ defaults:
   - material: carbon_steel
   - solver: default
   - weave: none
+  - convection: none
   - output: results
   - model@gmaw: gmaw
   - model@droplet: droplet

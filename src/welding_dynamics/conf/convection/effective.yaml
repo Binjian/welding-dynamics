@@ -1,0 +1,6 @@
+# 熔池对流方案 A (docs/melt_convection_assessment.md): 模块 10A 有效导热率
+# 耦合进 GoldakFDM —— 池内 k 放大 alpha_eff/alpha 倍 (限幅 limiter), 把
+# Marangoni 搅拌折算为增强热输运。dgamma_dT 取自母材; 其余为 10A 的液态钢
+# 量级默认 (mu/rho/cp/k 为液相值, 与 material 组的固相热物性不同源)。
+_target_: welding_dynamics.marangoni.EffectiveMarangoniCorrection
+dgamma_dT: ${material.dgamma_dT}

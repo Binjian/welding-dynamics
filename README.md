@@ -148,6 +148,7 @@ uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 | `material/` | **B 类材料物性** — ρ, cp, k, Tm, γ (手册值)                         | `carbon_steel`, `stainless_steel`, `cast_iron`, `aluminum` |
 | `solver/`   | **C 类数值配置** — 网格 dx、域尺寸、积分终点 (与工艺无关)             | `coarse`, `default`, `fine`                                  |
 | `weave/`    | **焊枪摆动** (A 类, 仅 `sim`/`sim_3d`) — 波形、摆幅 (峰-峰)、摆频 | `none`, `triangle`, `sine`, `pattern1`                     |
+| `convection/` | **熔池对流** (仅 `sim`/`sim_3d`) — 模块 10A 有效导热率耦合进 `GoldakFDM` | `none`, `effective`                                          |
 | `output/`   | 图片输出目录与 dpi                                                           | `results`, `per_run`                                           |
 
 要点：
@@ -156,6 +157,10 @@ uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 - `weave=triangle` 是数据库众数摆动工况（2 Hz × 4 mm 直线摆，87 条焊道）；
   `weave=pattern1` 的路点**逐字取自摆动库** (`weave_pattern`, pattern_id=1，两侧停留的梯形摆)，
   其余 20 个波形可按同格式增补。启用摆动后 `GoldakFDM` 自动改用全宽网格。
+- `convection=effective` 把模块 10A 的 Marangoni 搅拌折算为池内导热增强
+  (`α_eff/α`, 限幅 6) 耦合进 `GoldakFDM`（变系数通量形式，能量守恒不变；
+  dt 随最大扩散率缩小，代价约 ×12）。峰值温度回落到沸点以下，摆动峰值场的
+  "鱼鳞"棱脊被池内混合抹平。路线评估见 `docs/melt_convection_assessment.md`。
 - 物理常数在 YAML 中只出现一次：`conf/model/*.yaml` 用 `${material.k}` 之类的插值引用分组；
   派生量由解析器现算 (`${wd.half:}` 直径→半径，`${wd.alpha:}` 热扩散率 `k/(ρ·cp)`)，不会与 `k, ρ, cp` 漂移。
 - `process.arc_power_W: null` 表示"用上游功率"：`welding-sim` 取模块 1 的自调节稳态功率 `P_ss`；
@@ -369,6 +374,13 @@ uv run jupyter lab notebooks/pyvista_interactive_demo.ipynb
 `α_eff`。该模型是轻量级后处理/参数化修正，不求解速度场；`dγ/dT < 0`
 时给出外向表面流导致的加宽/变浅趋势，`dγ/dT > 0` 时给出内向表面流导致的
 变窄/加深趋势。
+
+除后处理用法外，10A 现已可**耦合进模块 4 的瞬态求解**：
+`GoldakFDM(convection=EffectiveMarangoniCorrection(...))` 或 CLI
+`convection=effective`（见上文配置分组表）。求解器切换到变系数通量形式，
+池内 k 放大 `α_eff/α` 倍（糊状区线性过渡，面上调和平均，能量守恒）；
+`convection=None` 默认路径逐位复现钉死结果。演示见
+`notebooks/robot6_weave_interactive_demo.ipynb` §4b/§5（复选框叠加对比）。
 
 ### 模块 10B — 2D 表面热毛细回流 (`marangoni.py`)
 
