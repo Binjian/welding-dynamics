@@ -146,7 +146,7 @@ uv run welding-sim --multirun process=db_p10,db_median,db_p90 output=per_run
 | ------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `process/`  | **A 类工况** — 电弧功率、焊接速度、干伸长、丝径 (工艺数据库可确定)    | `code_default`, `db_p10`, `db_median`, `db_p90`            |
 | `material/` | **B 类材料物性** — ρ, cp, k, Tm, γ (手册值)                         | `carbon_steel`, `stainless_steel`, `cast_iron`, `aluminum` |
-| `solver/`   | **C 类数值配置** — 网格 dx、域尺寸、积分终点 (与工艺无关)             | `coarse`, `default`, `fine`                                  |
+| `solver/`   | **C 类数值配置** — 网格 dx、域尺寸、积分终点 (与工艺无关)             | `coarse`, `default`, `fine`, `xfine`                         |
 | `weave/`    | **焊枪摆动** (A 类, 仅 `sim`/`sim_3d`) — 波形、摆幅 (峰-峰)、摆频 | `none`, `triangle`, `sine`, `pattern1`                     |
 | `convection/` | **熔池对流** (仅 `sim`/`sim_3d`) — 模块 10A 有效导热率耦合进 `GoldakFDM` | `none`, `effective`                                          |
 | `output/`   | 图片输出目录与 dpi                                                           | `results`, `per_run`                                           |
