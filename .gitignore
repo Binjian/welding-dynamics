@@ -8,3 +8,6 @@ results/multirun/
 
 # MuJoCo 在 CWD 写的警告日志 (notebook 的发散演示格会再生)
 MUJOCO_LOG.TXT
+
+# robot6 notebook 的视图参数持久化 (每次拖滑块自动写, 重跑恢复)
+notebooks/.robot6_view_state.json
