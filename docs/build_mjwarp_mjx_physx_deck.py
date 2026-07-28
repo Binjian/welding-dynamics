@@ -1240,6 +1240,158 @@ def add_fea_application_slide(prs):
     return slide
 
 
+def add_fluid_application_slide(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    section_header(
+        slide,
+        "A6",
+        "APPENDIX  / FLUID DYNAMICS",
+        "流体动力学：从 Navier–Stokes 到粒子—网格耦合",
+    )
+
+    rect(slide, 0.9, 1.84, 3.45, 4.72, NAVY, None)
+    text(
+        slide,
+        "ρ(∂u/∂t + u·∇u)",
+        1.05,
+        2.17,
+        3.15,
+        0.58,
+        size=18,
+        color=WHITE,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        font=FONT_MONO,
+    )
+    text(
+        slide,
+        "= −∇p + μ∇²u + f",
+        1.05,
+        2.75,
+        3.15,
+        0.52,
+        size=17,
+        color=CYAN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        font=FONT_MONO,
+    )
+    line(slide, 1.38, 3.51, 3.87, 3.51, NAVY_LINE, 1)
+    text(
+        slide,
+        "∇·u = 0",
+        1.1,
+        3.7,
+        3.05,
+        0.48,
+        size=23,
+        color=WHITE,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        font=FONT_MONO,
+    )
+    text(
+        slide,
+        "Warp 加速环节",
+        1.22,
+        4.32,
+        2.8,
+        0.36,
+        size=13.5,
+        color=CYAN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+    bullet_lines(
+        slide,
+        [
+            "对流与扩散更新",
+            "压力投影 / 稀疏求解",
+            "粒子—网格传输",
+            "批量场景与梯度",
+        ],
+        1.4,
+        4.77,
+        2.55,
+        0.4,
+        dot_color=CYAN,
+        size=10,
+        text_color=LIGHT_TEXT,
+    )
+
+    routes = [
+        (
+            "01",
+            "warp.fem 路径",
+            "Stokes / Navier–Stokes\n速度—压力混合空间",
+            "规则或非结构网格 · 稀疏线性系统",
+            BLUE,
+            PALE_BLUE,
+        ),
+        (
+            "02",
+            "APIC / 粒子—网格",
+            "粒子携带状态\n网格完成力与压力更新",
+            "适合大变形、自由表面和运动界面",
+            GREEN,
+            PALE_GREEN,
+        ),
+        (
+            "03",
+            "自定义 GPU Kernel",
+            "SPH / 邻域查询\n通量、源项与边界更新",
+            "适合高度并行的专用流体模型",
+            PURPLE,
+            PALE_PURPLE,
+        ),
+    ]
+    for i, (num, title_value, desc, footer_value, color, pale) in enumerate(routes):
+        y = 1.84 + i * 1.34
+        rect(slide, 4.7, y, 7.7, 1.15, WHITE, BORDER, radius=True)
+        rect(slide, 4.95, y + 0.25, 0.62, 0.62, color, None, radius=False)
+        text(slide, num, 4.95, y + 0.25, 0.62, 0.62, size=12.5, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, 5.83, y + 0.13, 2.25, 0.38, size=14.5, color=INK, bold=True)
+        text(slide, desc, 5.83, y + 0.51, 2.45, 0.49, size=9.5, color=MUTED)
+        rect(slide, 8.62, y + 0.22, 3.43, 0.72, pale, None)
+        text(
+            slide,
+            footer_value,
+            8.76,
+            y + 0.22,
+            3.15,
+            0.72,
+            size=9.4,
+            color=color,
+            bold=True,
+            align=PP_ALIGN.CENTER,
+        )
+
+    rect(slide, 4.7, 5.95, 7.7, 0.61, PALE_ORANGE, None)
+    applications = [
+        ("熔池流动", "表面张力 / 浮力"),
+        ("保护气体", "喷流 / 卷吸"),
+        ("热—流耦合", "温度—黏度—流速"),
+    ]
+    for i, (title_value, desc) in enumerate(applications):
+        x = 4.96 + i * 2.42
+        circle(slide, x, 6.09, 0.32, ORANGE)
+        text(slide, str(i + 1), x, 6.09, 0.32, 0.32, size=7.8, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, x + 0.44, 5.95, 0.9, 0.3, size=9.8, color=INK, bold=True)
+        text(slide, desc, x + 1.28, 5.95, 0.93, 0.3, size=8.3, color=MUTED, align=PP_ALIGN.RIGHT)
+    text(
+        slide,
+        "依据 NVIDIA Warp 文档：warp.fem 提供 Stokes、Navier–Stokes 与 APIC 示例；湍流、多相与熔池自由表面模型需专项验证。",
+        0.9,
+        6.78,
+        11.5,
+        0.18,
+        size=7.2,
+        color="8B95A5",
+    )
+    footer(slide, 18)
+    return slide
+
+
 def add_mjlab_slide(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     section_header(slide, "05", "MJLAB  / 能力路线", "平台落地需要补齐八项工程能力")
@@ -1334,6 +1486,7 @@ def build():
     add_thermal_application_slide(prs)
     add_electromagnetic_application_slide(prs)
     add_fea_application_slide(prs)
+    add_fluid_application_slide(prs)
 
     prs.save(OUTPUT)
     print(f"Wrote {OUTPUT} ({len(prs.slides)} slides)")
