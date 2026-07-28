@@ -355,7 +355,7 @@ def add_contents_slide(prs):
         ("02", "接触物理与性能差异", "动态分支、接触求解、摩擦模型与几何复杂度", GREEN),
         ("03", "人形机器人训练工作流", "MJX 训练 → MJWarp 验证 → 真实机器人", GOLD),
         ("04", "PhysX 对比与引擎选型", "任务形态 · 硬件平台 · 工程生态", ORANGE),
-        ("05", "NVIDIA 平台应用与 MjLab 路线", "新型机器人 · 焊接机器人 · 多物理场仿真", CYAN),
+        ("05", "MjLab 路线与应用附录", "能力建设 · 新型机器人 · 焊接机器人 · 多物理场仿真", CYAN),
     ]
     for i, (num, title_value, sub, color) in enumerate(rows):
         yy = 1.82 + i * 0.98
@@ -758,8 +758,8 @@ def add_platform_application_slide(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     section_header(
         slide,
-        "05",
-        "APPLICATIONS  / NVIDIA 仿真平台",
+        "A1",
+        "APPENDIX  / NVIDIA 仿真平台",
         "从 OpenUSD 场景描述到零迁移训练，形成一体化闭环",
     )
 
@@ -848,7 +848,7 @@ def add_platform_application_slide(prs):
         )
         text(slide, title_value, x + 0.98, 5.6, 2.4, 0.34, size=13, color=INK, bold=True)
         text(slide, desc, x + 0.98, 5.96, 2.42, 0.47, size=9.3, color=MUTED)
-    footer(slide, 11)
+    footer(slide, 13)
     return slide
 
 
@@ -856,8 +856,8 @@ def add_welding_application_slide(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     section_header(
         slide,
-        "05",
-        "INDUSTRIAL  / 焊接与传动系统",
+        "A2",
+        "APPENDIX  / 焊接与传动系统",
         "焊接机器人、减速机与伺服电机：三类 GPU 仿真能力",
     )
 
@@ -938,13 +938,311 @@ def add_welding_application_slide(prs):
         if i < len(flow) - 1:
             stage_arrow(slide, x + 1.87, 5.47, 0.27, 0.34, BLUE)
     rect(slide, 0.9, 6.5, 11.5, 0.19, BLUE, None, radius=False)
-    footer(slide, 12)
+    footer(slide, 14)
+    return slide
+
+
+def add_thermal_application_slide(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    section_header(
+        slide,
+        "A3",
+        "APPENDIX  / THERMAL SIMULATION",
+        "热仿真：从移动热源到温度场反演",
+    )
+
+    rect(slide, 0.9, 1.84, 3.45, 4.7, NAVY, None)
+    text(
+        slide,
+        "∂T/∂t",
+        1.16,
+        2.22,
+        2.92,
+        0.72,
+        size=35,
+        color=WHITE,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        font=FONT_MONO,
+    )
+    text(
+        slide,
+        "= α∇²T + Q/(ρc)",
+        1.05,
+        2.94,
+        3.15,
+        0.58,
+        size=21,
+        color=CYAN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        font=FONT_MONO,
+    )
+    line(slide, 1.38, 3.75, 3.87, 3.75, NAVY_LINE, 1)
+    text(
+        slide,
+        "Warp 的角色",
+        1.22,
+        3.96,
+        2.8,
+        0.38,
+        size=14,
+        color=WHITE,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+    bullet_lines(
+        slide,
+        [
+            "GPU 并行温度更新",
+            "网格 / 网格单元积分",
+            "批量参数扫描",
+            "自动微分与反演",
+        ],
+        1.4,
+        4.45,
+        2.55,
+        0.44,
+        dot_color=CYAN,
+        size=10.4,
+        text_color=LIGHT_TEXT,
+    )
+
+    steps = [
+        ("01", "离散域", "Grid / Mesh / NanoVDB\n材料参数 k · ρ · c", BLUE, PALE_BLUE),
+        ("02", "热源与边界", "移动热源 Q(x,t)\n对流 · 辐射 · 定温", ORANGE, PALE_ORANGE),
+        ("03", "GPU 求解", "Warp kernel / warp.fem\n显式步进或线性求解", GREEN, PALE_GREEN),
+        ("04", "批量与反演", "工艺参数扫描\n梯度校准 / 优化", PURPLE, PALE_PURPLE),
+    ]
+    for i, (num, title_value, desc, color, pale) in enumerate(steps):
+        col, row = i % 2, i // 2
+        x = 4.7 + col * 3.86
+        y = 1.84 + row * 1.72
+        rect(slide, x, y, 3.54, 1.48, WHITE, BORDER, radius=True)
+        rect(slide, x + 0.2, y + 0.24, 0.58, 0.58, color, None, radius=False)
+        text(slide, num, x + 0.2, y + 0.24, 0.58, 0.58, size=12.5, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, x + 0.98, y + 0.15, 2.25, 0.4, size=14.5, color=INK, bold=True)
+        text(slide, desc, x + 0.98, y + 0.58, 2.28, 0.62, size=9.6, color=MUTED)
+        rect(slide, x + 0.98, y + 1.19, 2.25, 0.12, pale, None, radius=False)
+
+    rect(slide, 4.7, 5.42, 7.55, 1.12, PALE, None)
+    use_cases = [
+        ("焊接热场", "Goldak / 移动热源"),
+        ("伺服与减速机", "损耗—温升—热漂移"),
+        ("逆问题", "热参数辨识与工艺优化"),
+    ]
+    for i, (title_value, desc) in enumerate(use_cases):
+        x = 4.98 + i * 2.4
+        circle(slide, x, 5.72, 0.47, [ORANGE, GREEN, PURPLE][i])
+        text(slide, str(i + 1), x, 5.72, 0.47, 0.47, size=10, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, x + 0.62, 5.52, 1.55, 0.31, size=10.8, color=INK, bold=True)
+        text(slide, desc, x + 0.62, 5.86, 1.58, 0.31, size=8.7, color=MUTED)
+    text(
+        slide,
+        "能力边界：Warp 提供 GPU kernel、FEM 与自动微分；材料模型、热源模型和耦合策略仍需按场景实现。",
+        0.9,
+        6.78,
+        11.5,
+        0.18,
+        size=7.2,
+        color="8B95A5",
+    )
+    footer(slide, 15)
+    return slide
+
+
+def add_electromagnetic_application_slide(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    section_header(
+        slide,
+        "A4",
+        "APPENDIX  / ELECTROMAGNETICS",
+        "电磁仿真：从 Maxwell 离散到磁场与力矩优化",
+    )
+
+    rect(slide, 0.9, 1.84, 5.52, 3.72, PALE_BLUE, None)
+    text(slide, "路径 1 · FDTD / 自定义 Kernel", 1.22, 2.05, 4.88, 0.42, size=16.5, color=BLUE, bold=True)
+    rich_text(
+        slide,
+        [
+            {"text": "∂E/∂t", "bold": True, "color": BLUE, "font": FONT_MONO, "size": 19},
+            {"text": "  ↔  ", "bold": True, "color": MUTED, "size": 17},
+            {"text": "∇×H", "bold": True, "color": BLUE, "font": FONT_MONO, "size": 19},
+        ],
+        1.22,
+        2.64,
+        4.85,
+        0.52,
+        align=PP_ALIGN.CENTER,
+    )
+    flow_left = [
+        ("交错网格", "E / H 场"),
+        ("时间步进", "curl 更新"),
+        ("边界处理", "PML / 激励"),
+    ]
+    for i, (title_value, desc) in enumerate(flow_left):
+        x = 1.2 + i * 1.62
+        rect(slide, x, 3.43, 1.34, 0.86, WHITE, BLUE, radius=True, line_width=0.9)
+        text(slide, title_value, x + 0.05, 3.46, 1.24, 0.32, size=10.5, color=BLUE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, desc, x + 0.05, 3.82, 1.24, 0.29, size=8.8, color=MUTED, align=PP_ALIGN.CENTER)
+        if i < 2:
+            stage_arrow(slide, x + 1.4, 3.68, 0.2, 0.3, BLUE)
+    text(
+        slide,
+        "适合：瞬态电磁波、规则网格、大批量设计点",
+        1.22,
+        4.72,
+        4.9,
+        0.42,
+        size=10.5,
+        color=INK,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    rect(slide, 6.86, 1.84, 5.54, 3.72, PALE_PURPLE, None)
+    text(slide, "路径 2 · warp.fem / Curl-Curl", 7.18, 2.05, 4.88, 0.42, size=16.5, color=PURPLE, bold=True)
+    rich_text(
+        slide,
+        [
+            {"text": "∇×(μ⁻¹∇×A)", "bold": True, "color": PURPLE, "font": FONT_MONO, "size": 18},
+            {"text": " = J", "bold": True, "color": MUTED, "font": FONT_MONO, "size": 18},
+        ],
+        7.18,
+        2.64,
+        4.86,
+        0.52,
+        align=PP_ALIGN.CENTER,
+    )
+    flow_right = [
+        ("非结构网格", "复杂几何"),
+        ("Nédélec 空间", "curl 相容"),
+        ("稀疏求解", "磁场 / 力"),
+    ]
+    for i, (title_value, desc) in enumerate(flow_right):
+        x = 7.16 + i * 1.62
+        rect(slide, x, 3.43, 1.34, 0.86, WHITE, PURPLE, radius=True, line_width=0.9)
+        text(slide, title_value, x + 0.05, 3.46, 1.24, 0.32, size=9.9, color=PURPLE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, desc, x + 0.05, 3.82, 1.24, 0.29, size=8.8, color=MUTED, align=PP_ALIGN.CENTER)
+        if i < 2:
+            stage_arrow(slide, x + 1.4, 3.68, 0.2, 0.3, PURPLE)
+    text(
+        slide,
+        "官方示例：2D magnetostatics · curl-curl formulation",
+        7.18,
+        4.72,
+        4.86,
+        0.42,
+        size=10.2,
+        color=INK,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    use_cases = [
+        ("伺服电机", "磁场 / 力矩 / 参数优化", GREEN),
+        ("感应加热与焊接", "电磁—热源耦合", ORANGE),
+        ("传感器与执行器", "场分布 / 灵敏度设计", CYAN),
+    ]
+    for i, (title_value, desc, color) in enumerate(use_cases):
+        x = 0.9 + i * 3.92
+        rect(slide, x, 5.82, 3.66, 0.76, WHITE, BORDER, radius=True)
+        circle(slide, x + 0.2, 5.98, 0.44, color)
+        text(slide, str(i + 1), x + 0.2, 5.98, 0.44, 0.44, size=9.5, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, x + 0.78, 5.82, 1.35, 0.34, size=10.7, color=INK, bold=True)
+        text(slide, desc, x + 2.03, 5.82, 1.4, 0.34, size=8.7, color=MUTED, align=PP_ALIGN.RIGHT)
+    text(
+        slide,
+        "能力边界：Warp 官方提供磁静力 FEM 示例；全波、频域、多材料与 PML 等能力需自行构建和验证。",
+        0.9,
+        6.78,
+        11.5,
+        0.18,
+        size=7.2,
+        color="8B95A5",
+    )
+    footer(slide, 16)
+    return slide
+
+
+def add_fea_application_slide(prs):
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    section_header(
+        slide,
+        "A5",
+        "APPENDIX  / FINITE ELEMENT ANALYSIS",
+        "有限元分析：GPU 加速装配、求解与可微设计",
+    )
+
+    stages = [
+        ("01", "Geometry", "Grid / Mesh\nNanoVDB", BLUE),
+        ("02", "Function Space", "P / Q / S\n标量与向量场", CYAN),
+        ("03", "Integrate", "线性 / 双线性形式\n数值积分", ORANGE),
+        ("04", "Sparse System", "BSR 矩阵\n边界条件", GREEN),
+        ("05", "Solve + Grad", "CG / 迭代求解\n自动微分", PURPLE),
+    ]
+    for i, (num, title_value, desc, color) in enumerate(stages):
+        x = 0.9 + i * 2.36
+        rect(slide, x, 1.86, 2.02, 2.36, WHITE, color, radius=True, line_width=1.2)
+        rect(slide, x + 0.18, 2.09, 0.55, 0.31, PALE, None)
+        text(slide, num, x + 0.18, 2.09, 0.55, 0.31, size=9.3, color=color, bold=True, align=PP_ALIGN.CENTER)
+        circle(slide, x + 0.7, 2.58, 0.62, color)
+        text(slide, title_value[0], x + 0.7, 2.58, 0.62, 0.62, size=16, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, title_value, x + 0.15, 3.38, 1.72, 0.4, size=12.5 if i != 1 else 10.8, color=INK, bold=True, align=PP_ALIGN.CENTER)
+        text(slide, desc, x + 0.16, 3.78, 1.7, 0.34, size=8.8, color=MUTED, align=PP_ALIGN.CENTER)
+        if i < len(stages) - 1:
+            stage_arrow(slide, x + 2.07, 2.86, 0.36, 0.44, BLUE)
+
+    rect(slide, 0.9, 4.58, 7.52, 1.96, PALE, None)
+    text(slide, "warp.fem 可直接覆盖的典型问题", 1.18, 4.77, 6.9, 0.36, size=14, color=BLUE, bold=True)
+    fem_cases = [
+        ("扩散 / 对流", "热传导与输运", BLUE),
+        ("弹性力学", "应力、应变、变形", GREEN),
+        ("接触", "非匹配网格接触", ORANGE),
+        ("优化", "弹性体形状优化", PURPLE),
+    ]
+    for i, (title_value, desc, color) in enumerate(fem_cases):
+        x = 1.18 + (i % 2) * 3.42
+        y = 5.3 + (i // 2) * 0.52
+        circle(slide, x, y + 0.1, 0.18, color)
+        text(slide, title_value, x + 0.32, y, 1.15, 0.35, size=10.3, color=INK, bold=True)
+        text(slide, desc, x + 1.52, y, 1.55, 0.35, size=9, color=MUTED)
+
+    rect(slide, 8.72, 4.58, 3.68, 1.96, NAVY, None)
+    text(slide, "机器人结构应用", 9.0, 4.79, 3.1, 0.36, size=14, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
+    bullet_lines(
+        slide,
+        [
+            "连杆与末端刚度",
+            "减速机壳体应力",
+            "热—结构耦合变形",
+            "轻量化 / 逆向设计",
+        ],
+        9.08,
+        5.22,
+        2.82,
+        0.29,
+        dot_color=CYAN,
+        size=9.3,
+        text_color=WHITE,
+    )
+    text(
+        slide,
+        "依据 NVIDIA Warp 文档：warp.fem 支持 PDE 的 Galerkin 离散、网格/函数空间、形式积分、稀疏系统与迭代求解。",
+        0.9,
+        6.78,
+        11.5,
+        0.18,
+        size=7.2,
+        color="8B95A5",
+    )
+    footer(slide, 17)
     return slide
 
 
 def add_mjlab_slide(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[0])
-    section_header(slide, "06", "MJLAB  / 能力路线", "平台落地需要补齐八项工程能力")
+    section_header(slide, "05", "MJLAB  / 能力路线", "平台落地需要补齐八项工程能力")
 
     items = [
         ("01", "快速 CUDA 仿真", "构建更强的 Isaac Lab 训练底座", BLUE, PALE_BLUE),
@@ -967,7 +1265,7 @@ def add_mjlab_slide(prs):
         text(slide, title_value, x + 1.02, y + 0.1, 4.25, 0.4, size=14.5, color=INK, bold=True)
         text(slide, desc, x + 1.02, y + 0.5, 4.25, 0.33, size=10.3, color=MUTED)
     rect(slide, 0.9, 6.53, 11.5, 0.2, BLUE, None, radius=False)
-    footer(slide, 13)
+    footer(slide, 11)
     return slide
 
 
@@ -1006,7 +1304,7 @@ def add_recommendation_slide(prs):
         size=12,
         color=MUTED,
     )
-    text(slide, "14", 11.9, 7.08, 0.5, 0.22, size=8, color="9AA4B5", align=PP_ALIGN.RIGHT)
+    text(slide, "12", 11.9, 7.08, 0.5, 0.22, size=8, color="9AA4B5", align=PP_ALIGN.RIGHT)
     return slide
 
 
@@ -1029,10 +1327,13 @@ def build():
     add_humanoid_slide(prs)
     add_physx_slide(prs)
     add_selection_slide(prs)
-    add_platform_application_slide(prs)
-    add_welding_application_slide(prs)
     add_mjlab_slide(prs)
     add_recommendation_slide(prs)
+    add_platform_application_slide(prs)
+    add_welding_application_slide(prs)
+    add_thermal_application_slide(prs)
+    add_electromagnetic_application_slide(prs)
+    add_fea_application_slide(prs)
 
     prs.save(OUTPUT)
     print(f"Wrote {OUTPUT} ({len(prs.slides)} slides)")
