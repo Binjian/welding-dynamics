@@ -1,0 +1,3 @@
+[submodule "vendor/trame-rtx-widget"]
+	path = vendor/trame-rtx-widget
+	url = git@gitlab.com:siasunx1/trame-rtx-widget.git
