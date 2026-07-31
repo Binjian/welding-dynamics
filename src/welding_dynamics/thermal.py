@@ -131,12 +131,53 @@ class GoldakFDM:
                 div += 2.0*Kn*K/(Kn + K) * (Tn - T)
         return div
 
-    def run(self, t_end=5.0, x_start=0.015):
+    def _solve(
+            self, t_end, x_start, *, frame_times=None,
+            snapshot_dtype=None):
         # 显式稳定性; 对流增强时按池内最大扩散率缩小 dt
         dt = 0.4 * self.dx**2 / (6 * self.alpha * self.k_pool_mult)
         n_steps = int(t_end / dt)
         T, dx2 = self.T, self.dx**2
         peak = np.full_like(T, self.T0)               # 记录峰值温度
+        snapshots = None
+        snapshot_steps = {}
+        targets = None
+        if frame_times is not None:
+            targets = np.asarray(frame_times, dtype=float)
+            if targets.ndim != 1:
+                raise ValueError("frame_times must be a one-dimensional sequence")
+            if not np.all(np.isfinite(targets)):
+                raise ValueError("frame_times must contain only finite values")
+            if np.any(np.diff(targets) < 0):
+                raise ValueError("frame_times must be sorted")
+            if np.any(targets < 0) or np.any(targets > float(t_end)):
+                raise ValueError("frame_times must lie within [0, t_end]")
+            if n_steps <= 0 and np.any(targets > 0):
+                raise ValueError("t_end is too short to capture a frame")
+            dtype = None if snapshot_dtype is None else np.dtype(
+                snapshot_dtype)
+            snapshots = [None] * len(targets)
+            # T is advanced from t=n*dt to (n+1)*dt. Capture the first
+            # post-step state at or after each requested time, except t=0
+            # which intentionally records the unadvanced initial state.
+            steps = np.ceil(targets / dt).astype(int) - 1
+            steps = np.clip(steps, -1, max(n_steps - 1, -1))
+            for slot, step in enumerate(steps):
+                snapshot_steps.setdefault(int(step), []).append(slot)
+
+            def capture(step):
+                for slot in snapshot_steps.get(step, ()):
+                    if dtype is None:
+                        T_frame, peak_frame = T.copy(), peak.copy()
+                    else:
+                        T_frame = np.array(T, dtype=dtype, copy=True)
+                        peak_frame = np.array(
+                            peak, dtype=dtype, copy=True)
+                    snapshots[slot] = (
+                        float(targets[slot]), T_frame, peak_frame)
+
+            capture(-1)
+
         # 半模型只含物理热源的一半; 全宽模型含全部
         P_target = self.eta * self.Q * (0.5 if self.symmetric else 1.0)
         xs = ys = 0.0
@@ -163,8 +204,41 @@ class GoldakFDM:
                 T[:, 0] = self.T0
             T[:, :, -1] = self.T0
             peak = np.maximum(peak, T)
+            if snapshots is not None:
+                capture(n)
         self.T, self.peak, self.xs_end, self.ys_end = T, peak, xs, ys
+        return T, snapshots
+
+    def run(self, t_end=5.0, x_start=0.015):
+        """Advance to ``t_end`` and retain the final and peak fields."""
+
+        T, _ = self._solve(t_end, x_start)
         return T
+
+    def run_with_snapshots(
+            self, t_end=5.0, x_start=0.015, *, frame_times,
+            snapshot_dtype=None):
+        """Advance once and retain fields at requested animation times.
+
+        Each returned tuple is ``(requested_time, T, peak)``. ``t=0``
+        records the unadvanced initial state; later frames use the first
+        completed integration step at or after the requested time. A target
+        beyond the truncated integration horizon is mapped to the final
+        completed step. The final full-precision ``T`` and ``peak`` remain
+        available on this instance, exactly as after :meth:`run`.
+
+        ``snapshot_dtype=np.float32`` is useful for visualization caches while
+        keeping the numerical integration and retained final fields in their
+        original precision.
+        """
+
+        _, snapshots = self._solve(
+            t_end,
+            x_start,
+            frame_times=frame_times,
+            snapshot_dtype=snapshot_dtype,
+        )
+        return snapshots
 
     def pool_size(self):
         melt = self.T >= self.Tm
