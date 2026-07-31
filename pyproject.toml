@@ -17,7 +17,7 @@ dependencies = [
     "pandas>=2.3.3",
     "openpyxl>=3.1.5",
     "pymongo>=4.17.0",
-    "pyvista[jupyter]>=0.48.4",
+    "pyvista>=0.48.4",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +34,16 @@ notebook = [
     "ipywidgets>=8.0",
     "trame-vtk>=2.8.15",
     "trame-vuetify>=2.9.0",
+]
+# NVIDIA RTX/EGL live widgets used by
+# notebooks/robot6_weave_interactive_rtx_demo.ipynb.
+# VTK 9.4+ PyPI wheels include the EGL render-window backend on Linux.
+rtx = [
+    "ipywidgets>=8.0",
+    "jupyter>=1.0",
+    "jupyter-server-proxy>=4.0",
+    "trame-rtx-widget",
+    "vtk>=9.4",
 ]
 # 模块 7b 的 MuJoCo 多体动力学后端 (robot_mujoco.py): `uv sync --extra mujoco`。
 # SixDofArm/变分积分器本身不需要本组 — MuJoCo 仅在 MujocoArm 内延迟导入。
@@ -57,3 +67,17 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/welding_dynamics"]
+
+[tool.uv]
+# PyVista 0.48's `jupyter` extra requires trame-vtk<2.11.9, while the RTX
+# widget requires trame-vtk>=2.11.15. Keep the two rendering backends in
+# separately reproducible environments.
+conflicts = [
+    [
+        { extra = "notebook" },
+        { extra = "rtx" },
+    ],
+]
+
+[tool.uv.sources]
+trame-rtx-widget = { path = "vendor/trame-rtx-widget", editable = true }
