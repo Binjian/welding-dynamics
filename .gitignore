@@ -11,3 +11,4 @@ MUJOCO_LOG.TXT
 
 # robot6 notebook 的视图参数持久化 (每次拖滑块自动写, 重跑恢复)
 notebooks/.robot6_view_state.json
+/.vscode/
