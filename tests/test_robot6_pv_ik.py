@@ -54,7 +54,14 @@ class RobotPVTipIKTest(unittest.TestCase):
         )
         layers = tuple(
             LayerSpec(key, key)
-            for key in ("robot", "workpiece", "seam", "executed_path", "axes")
+            for key in (
+                "robot",
+                "ik_handle",
+                "workpiece",
+                "seam",
+                "executed_path",
+                "axes",
+            )
         )
         self.scene = RobotPVScene(
             context,
@@ -222,6 +229,22 @@ class RobotPVTipIKTest(unittest.TestCase):
             self.assertTrue(self.scene.robot.tip_handle_enabled)
             self.assertIn("orange handle", app.title.value)
             self.assertIn("Mink IK ready", app.tip_ik_status.value)
+
+            handle_control = app.layer_controls[
+                next(
+                    index
+                    for index, spec in enumerate(app.layers)
+                    if spec.key == "ik_handle"
+                )
+            ]
+            handle = self.scene.robot.tip_handle_record["prop"]
+            self.assertTrue(handle.GetVisibility())
+            handle_control.value = False
+            self.assertFalse(handle.GetVisibility())
+            self.assertFalse(handle.GetPickable())
+            handle_control.value = True
+            self.assertTrue(handle.GetVisibility())
+            self.assertTrue(handle.GetPickable())
 
             self.assertTrue(self.scene.begin_tip_drag())
             self.assertTrue(

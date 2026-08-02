@@ -1088,6 +1088,9 @@ class WeldingPVSceneBase:
             self._instant_mode = bool(visible)
         else:
             self._layer_visible[key] = bool(visible)
+        if key == "ik_handle" and hasattr(self, "robot"):
+            prop = self.robot.tip_handle_record["prop"]
+            prop.SetPickable(bool(visible) and self.robot.tip_handle_enabled)
         self._on_layer_changed(key, bool(visible))
         self._apply_visibility()
         self._update_selection_outline()
@@ -1271,6 +1274,8 @@ class RobotRig:
         )
         if enabled:
             self.set_tip_handle_error(False)
+            if not self.scene._layer_visible.get("ik_handle", True):
+                prop.PickableOff()
 
     def set_tip_handle_error(self, failed):
         color = "#d1242f" if failed else "#f59e0b"
