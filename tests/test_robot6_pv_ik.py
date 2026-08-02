@@ -172,14 +172,16 @@ class RobotPVTipIKTest(unittest.TestCase):
 
         display = self.scene.world_to_display(self.scene.tip_world_position())
         x, y = (round(display[0]), round(display[1]))
-        target, group, _ = self.scene.pick_interaction_target(x, y)
-        self.assertEqual(target, "tip")
-        self.assertEqual(group, "robot")
+        for selected_group in ("robot", "process"):
+            self.scene.select_transform_group(selected_group, render=False)
+            target, group, _ = self.scene.pick_interaction_target(x + 20, y)
+            self.assertEqual(target, "tip")
+            self.assertEqual(group, "robot")
 
-        interactor.SetEventInformation(x, y)
+        interactor.SetEventInformation(x + 20, y)
         style._on_left_press(None, None)
         self.assertEqual(style.drag_mode, "tip")
-        interactor.SetEventInformation(x + 7, y + 3)
+        interactor.SetEventInformation(x + 27, y + 3)
         style._on_mouse_move(None, None)
         style._on_left_release(None, None)
 
@@ -242,6 +244,13 @@ class RobotPVTipIKTest(unittest.TestCase):
             handle_control.value = False
             self.assertFalse(handle.GetVisibility())
             self.assertFalse(handle.GetPickable())
+            handle_display = self.scene.world_to_display(
+                self.scene.tip_world_position()
+            )
+            hidden_target, _, _ = self.scene.pick_interaction_target(
+                round(handle_display[0]), round(handle_display[1])
+            )
+            self.assertNotEqual(hidden_target, "tip")
             handle_control.value = True
             self.assertTrue(handle.GetVisibility())
             self.assertTrue(handle.GetPickable())

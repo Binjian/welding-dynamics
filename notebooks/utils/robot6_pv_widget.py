@@ -85,6 +85,7 @@ MOVABLE_LAYER_GROUPS = {
 
 R_LINK = (45.0, 38.0, 32.0, 22.0, 20.0, 16.0)
 R_JOINT = (50.0, 42.0, 36.0, 26.0, 24.0)
+TIP_HANDLE_HIT_RADIUS_PX = 24.0
 
 
 def _rgb(color):
@@ -600,6 +601,8 @@ class WeldingPVSceneBase:
 
         if self.closed:
             return None, None, None
+        if self.tip_handle_hit_test(x, y):
+            return "tip", "robot", self.tip_world_position()
         picked = self._interaction_picker.Pick(float(x), float(y), 0.0, self.renderer)
         prop = self._interaction_picker.GetViewProp() if picked else None
         if prop is None:
@@ -611,6 +614,30 @@ class WeldingPVSceneBase:
         target = self._prop_interaction_target.get(address, "transform")
         position = np.asarray(self._interaction_picker.GetPickPosition(), dtype=float)
         return target, group, position
+
+    def tip_handle_hit_test(self, x, y):
+        """Give the visible TCP handle a stable screen-space pick target.
+
+        The ordinary cell picker returns the closest 3D surface, so the gun or
+        another nearby actor can otherwise win even when the pointer is over
+        the small orange handle. This priority hit area is intentionally in
+        display pixels so it stays easy to acquire at every camera distance.
+        """
+
+        if not self._tip_ik_enabled or not hasattr(self, "robot"):
+            return False
+        prop = self.robot.tip_handle_record["prop"]
+        if not prop.GetVisibility() or not prop.GetPickable():
+            return False
+        if self.robot.tip_position_mm is None:
+            return False
+        center = self.world_to_display(self.tip_world_position())
+        if not np.all(np.isfinite(center[:2])):
+            return False
+        return bool(
+            np.hypot(float(x) - center[0], float(y) - center[1])
+            <= TIP_HANDLE_HIT_RADIUS_PX
+        )
 
     def pick_transform_group(self, x, y):
         """Compatibility wrapper for callers interested only in rigid groups."""
