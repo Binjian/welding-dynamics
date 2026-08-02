@@ -7,8 +7,9 @@ PyVista** tabs produced by cell 8. Dragging a visible TCP handle pauses
 playback and updates the UR5e joint configuration in place while preserving
 the existing camera and rigid-object controls.
 
-The native RTX renderer remains unchanged. This feature applies to the
-PyVista frontend and the RTX notebook's non-EGL fallback.
+The same interaction is also enabled in the native NVIDIA RTX/EGL Composite
+and Seam widgets. The RTX notebook's non-EGL fallback continues to dispatch
+to the portable PyVista implementation.
 
 ## Implementation changes
 
@@ -40,6 +41,14 @@ PyVista frontend and the RTX notebook's non-EGL fallback.
   - Report convergence/residual feedback and colour the handle red for an
     unreachable request.
 
+- Mirror that interaction in the native RTX scene layer.
+  - Reuse `MinkArmIK` and the same fixed-depth, cursor-offset drag semantics.
+  - Give the TCP handle a priority screen-space hit target so surrounding
+    geometry and a selected object outline do not make it difficult to pick.
+  - Preserve Shift/Ctrl rigid transforms when a modifier drag starts over the
+    handle, and keep camera orbit behavior everywhere else.
+  - Add a persisted `TCP IK handle` layer switch to both native live views.
+
 - Integrate scene and widget lifecycle behavior.
   - Enable the feature independently in the Composite and Seam apps.
   - Keep the handle disabled during Seam GIF capture, then enable it for the
@@ -60,6 +69,8 @@ PyVista frontend and the RTX notebook's non-EGL fallback.
   position and orientation residuals, and convergence state.
 - `PyVistaWidgetApp(..., enable_tip_ik=False)` opts a live scene into TCP
   manipulation.
+- Native `launch_live(..., enable_tip_ik=False)` provides the equivalent opt-in
+  for `WeldingRTXLiveWidget`.
 
 ## Test plan
 
@@ -80,6 +91,6 @@ PyVista frontend and the RTX notebook's non-EGL fallback.
 
 - Tool orientation is fixed during each drag.
 - IK overrides apply only to the current frame.
-- An always-visible TCP handle is used in live widgets.
+- The TCP handle is visible by default and has its own layer checkbox.
 - Composite and Seam tabs maintain independent IK poses.
-- Native RTX widgets are outside this PyVista-specific change.
+- Native NVIDIA RTX/EGL widgets use the same TCP-drag semantics as PyVista.
