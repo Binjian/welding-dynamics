@@ -10,6 +10,7 @@ by sections 2, 3, 5 and 5b:
 * studio lighting, a generated sky and a finite grid floor;
 * world-space axes whose labels scale naturally when the camera zooms;
 * selection and mouse transforms for the robot and process-object groups;
+* live Mink IK when the UR5e TCP handle is dragged;
 * ipywidget playback/layer/view controls suitable for placing in tabs.
 
 It intentionally does not depend on ``trame-rtx-widget``.  Rendering and the
@@ -21,6 +22,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from html import escape
 from pathlib import Path
 
 import ipywidgets as widgets
@@ -30,6 +32,8 @@ import vtk
 from matplotlib import colormaps
 from matplotlib.colors import to_rgb
 from vtk.util.numpy_support import numpy_to_vtk
+
+from welding_dynamics.robot_ik import MinkArmIK
 
 from .view_controls import VIEW_KEYS, WidgetStore, view_widgets
 
@@ -252,7 +256,7 @@ def axis_rotation_matrix(axis, angle_degrees):
 
 
 class LayerTransformInteractor(vtk.vtkInteractorStyleTrackballCamera):
-    """Trackball camera plus Shift-translate/Ctrl-rotate actor groups."""
+    """Trackball camera, actor transforms, and direct TCP IK dragging."""
 
     def __init__(self, scene):
         super().__init__()
@@ -261,6 +265,7 @@ class LayerTransformInteractor(vtk.vtkInteractorStyleTrackballCamera):
         self.drag_mode = None
         self.drag_depth = 0.0
         self.drag_pivot = None
+        self.drag_cursor_offset = None
         self.last_position = None
         self._observer_tags = (
             self.AddObserver("LeftButtonPressEvent", self._on_left_press),
@@ -273,9 +278,22 @@ class LayerTransformInteractor(vtk.vtkInteractorStyleTrackballCamera):
         if interactor is None or scene is None or scene.closed:
             return
         x, y = map(float, interactor.GetEventPosition())
-        group, pick_position = scene.pick_transform_group(x, y)
-        scene.select_transform_group(group, render=False)
+        target, group, pick_position = scene.pick_interaction_target(x, y)
         control, shift = bool(interactor.GetControlKey()), bool(interactor.GetShiftKey())
+        if target == "tip" and not (control or shift):
+            scene.select_transform_group(None, render=False)
+            tip_position = scene.tip_world_position()
+            self.drag_depth = scene.world_to_display(tip_position)[2]
+            cursor_world = scene.display_to_world(x, y, self.drag_depth)
+            if cursor_world is not None and scene.begin_tip_drag():
+                self.drag_group = group
+                self.drag_mode = "tip"
+                self.drag_cursor_offset = tip_position - cursor_world
+                self.last_position = scene.normalize_display_position((x, y))
+                scene.notify_transform_started()
+                interactor.Render()
+                return
+        scene.select_transform_group(group, render=False)
         if group is not None and (control or shift):
             self.drag_group = group
             self.drag_mode = "rotate" if control else "translate"
@@ -296,14 +314,20 @@ class LayerTransformInteractor(vtk.vtkInteractorStyleTrackballCamera):
             self.OnMouseMove()
             return
         position = scene.normalize_display_position(interactor.GetEventPosition())
-        scene.drag_transform_group(
-            self.drag_group,
-            self.drag_mode,
-            self.last_position,
-            position,
-            self.drag_depth,
-            self.drag_pivot,
-        )
+        if self.drag_mode == "tip":
+            display_position = scene.denormalize_display_position(position)
+            cursor_world = scene.display_to_world(*display_position, self.drag_depth)
+            if cursor_world is not None:
+                scene.drag_tip(cursor_world + self.drag_cursor_offset)
+        else:
+            scene.drag_transform_group(
+                self.drag_group,
+                self.drag_mode,
+                self.last_position,
+                position,
+                self.drag_depth,
+                self.drag_pivot,
+            )
         self.last_position = position
         interactor.Render()
 
@@ -311,16 +335,22 @@ class LayerTransformInteractor(vtk.vtkInteractorStyleTrackballCamera):
         if self.drag_group is None:
             self.OnLeftButtonUp()
             return
-        self._clear_drag()
+        self._finish_drag()
         interactor = self.GetInteractor()
         if interactor is not None:
             interactor.Render()
 
     def _clear_drag(self):
         self.drag_group = self.drag_mode = self.drag_pivot = self.last_position = None
+        self.drag_cursor_offset = None
+
+    def _finish_drag(self):
+        if self.drag_mode == "tip" and self.scene is not None:
+            self.scene.end_tip_drag()
+        self._clear_drag()
 
     def detach(self):
-        self._clear_drag()
+        self._finish_drag()
         for tag in self._observer_tags:
             self.RemoveObserver(tag)
         self._observer_tags = ()
@@ -352,9 +382,18 @@ class WeldingPVSceneBase:
         self._transform_poses = {}
         self._transform_objects = {}
         self._prop_transform_group = {}
+        self._prop_interaction_target = {}
         self._selected_transform_group = None
         self._transform_start_callback = None
+        self._tip_ik_status_callback = None
         self._interaction_style = None
+        self._tip_ik = None
+        self._tip_ik_enabled = False
+        self._tip_drag_rotation = None
+        self._tip_drag_posture_q = None
+        self._tip_override_q = None
+        self._tip_override_frame = None
+        self._nominal_robot_q = None
         self._interaction_picker = vtk.vtkCellPicker()
         self._interaction_picker.SetTolerance(0.005)
         self._interaction_picker.PickFromListOn()
@@ -539,17 +578,45 @@ class WeldingPVSceneBase:
         if render:
             self.render()
 
-    def pick_transform_group(self, x, y):
+    def set_prop_interaction_target(self, prop, target, group, *, enabled):
+        """Add or remove a separately routed prop from the interaction picker."""
+
+        address = prop.GetAddressAsString("")
+        if enabled:
+            if address not in self._prop_interaction_target:
+                self._interaction_picker.AddPickList(prop)
+            self._prop_interaction_target[address] = str(target)
+            self._prop_transform_group[address] = group
+            prop.PickableOn()
+            return
+        if address in self._prop_interaction_target:
+            self._interaction_picker.DeletePickList(prop)
+        self._prop_interaction_target.pop(address, None)
+        self._prop_transform_group.pop(address, None)
+        prop.PickableOff()
+
+    def pick_interaction_target(self, x, y):
+        """Return ``(target, transform_group, world_position)`` for a pick."""
+
         if self.closed:
-            return None, None
+            return None, None, None
         picked = self._interaction_picker.Pick(float(x), float(y), 0.0, self.renderer)
         prop = self._interaction_picker.GetViewProp() if picked else None
         if prop is None:
-            return None, None
-        group = self._prop_transform_group.get(prop.GetAddressAsString(""))
+            return None, None, None
+        address = prop.GetAddressAsString("")
+        group = self._prop_transform_group.get(address)
         if group is None:
-            return None, None
-        return group, np.asarray(self._interaction_picker.GetPickPosition(), dtype=float)
+            return None, None, None
+        target = self._prop_interaction_target.get(address, "transform")
+        position = np.asarray(self._interaction_picker.GetPickPosition(), dtype=float)
+        return target, group, position
+
+    def pick_transform_group(self, x, y):
+        """Compatibility wrapper for callers interested only in rigid groups."""
+
+        _, group, position = self.pick_interaction_target(x, y)
+        return group, position
 
     def world_to_display(self, point):
         self.renderer.SetWorldPoint(*map(float, point), 1.0)
@@ -582,6 +649,154 @@ class WeldingPVSceneBase:
 
     def set_transform_start_callback(self, callback):
         self._transform_start_callback = callback
+
+    def set_tip_ik_status_callback(self, callback):
+        self._tip_ik_status_callback = callback
+
+    def _emit_tip_ik_status(self, level, message):
+        if self._tip_ik_status_callback is not None:
+            self._tip_ik_status_callback(str(level), str(message))
+
+    def enable_tip_ik(self, enabled=True, *, render=True):
+        """Enable direct Mink IK dragging for this scene's TCP handle."""
+
+        enabled = bool(enabled)
+        if enabled == self._tip_ik_enabled:
+            return
+        if enabled:
+            if not hasattr(self, "context") or not hasattr(self, "robot"):
+                raise TypeError("tip IK requires a robot scene with a context")
+            self._tip_ik = MinkArmIK(self.context.arm)
+            self._tip_ik_enabled = True
+            self.robot.set_tip_handle_enabled(True)
+            self._emit_tip_ik_status("ready", "Mink IK ready — drag the orange TCP handle")
+        else:
+            self.end_tip_drag()
+            self.clear_tip_ik_override(render=False, notify=False)
+            if hasattr(self, "robot"):
+                self.robot.set_tip_handle_enabled(False)
+            self._tip_ik_enabled = False
+            self._tip_ik = None
+        self._apply_visibility()
+        self.renderer.ResetCameraClippingRange()
+        if render:
+            self.render()
+
+    def tip_world_position(self):
+        """Return the FK TCP position after the optional rigid robot transform."""
+
+        if not hasattr(self, "robot") or self.robot.tip_position_mm is None:
+            raise RuntimeError("robot pose has not been initialized")
+        local = np.append(self.robot.tip_position_mm, 1.0)
+        pose = self._transform_poses.get("robot", np.eye(4))
+        return (pose @ local)[:3]
+
+    def _robot_local_position(self, world_position):
+        pose = self._transform_poses.get("robot", np.eye(4))
+        local = np.linalg.solve(pose, np.append(np.asarray(world_position, dtype=float), 1.0))
+        if abs(local[3]) < 1e-12:
+            raise ValueError("robot transform produced an invalid homogeneous position")
+        return local[:3] / local[3]
+
+    def begin_tip_drag(self):
+        """Capture the current tool orientation and posture for one IK drag."""
+
+        if not self._tip_ik_enabled or self._tip_ik is None:
+            return False
+        q = self.robot.current_q
+        if q is None:
+            return False
+        self._tip_drag_posture_q = np.asarray(q, dtype=float).copy()
+        self._tip_drag_rotation = np.asarray(self.robot.tip_rotation, dtype=float).copy()
+        self.robot.set_tip_handle_error(False)
+        self._emit_tip_ik_status("active", "Mink IK solving…")
+        return True
+
+    def drag_tip(self, target_world_mm):
+        """Solve and display one fixed-orientation TCP target from a mouse move."""
+
+        if (
+            not self._tip_ik_enabled
+            or self._tip_ik is None
+            or self._tip_drag_rotation is None
+        ):
+            return False
+        q_seed = np.asarray(self.robot.current_q, dtype=float)
+        try:
+            target_position_m = self._robot_local_position(target_world_mm) * 1e-3
+            result = self._tip_ik.solve(
+                q_seed,
+                target_position_m,
+                self._tip_drag_rotation,
+                posture_q=self._tip_drag_posture_q,
+            )
+            q = np.asarray(result.q, dtype=float)
+            achieved = np.asarray(result.achieved_position_m, dtype=float)
+            position_error_m = float(result.position_error_m)
+            orientation_error_rad = float(result.orientation_error_rad)
+            finite = (
+                q.shape == (6,)
+                and achieved.shape == (3,)
+                and np.all(np.isfinite(q))
+                and np.all(np.isfinite(achieved))
+                and np.isfinite(position_error_m)
+                and np.isfinite(orientation_error_rad)
+            )
+            if not finite:
+                raise ValueError("Mink returned a non-finite IK result")
+        except Exception as exc:  # noqa: BLE001 -- interactive solver boundary
+            self.robot.set_tip_handle_error(True)
+            self._emit_tip_ik_status(
+                "error", f"Mink IK error: {type(exc).__name__}: {exc}"
+            )
+            return False
+
+        self._tip_override_q = q.copy()
+        self._tip_override_frame = self.current_frame
+        self.robot.update(q)
+        converged = bool(result.converged)
+        self.robot.set_tip_handle_error(not converged)
+        level = "ok" if converged else "error"
+        label = "converged" if converged else "target not converged"
+        self._emit_tip_ik_status(
+            level,
+            f"Mink IK {label} — Δp {position_error_m * 1e3:.4f} mm · "
+            f"ΔR {orientation_error_rad:.5f} rad",
+        )
+        self.renderer.ResetCameraClippingRange()
+        return converged
+
+    def end_tip_drag(self):
+        self._tip_drag_rotation = None
+        self._tip_drag_posture_q = None
+
+    def _update_robot_pose(self, q):
+        """Store the nominal frame pose and apply a current-frame IK override."""
+
+        self._nominal_robot_q = np.asarray(q, dtype=float).copy()
+        display_q = self._nominal_robot_q
+        if (
+            self._tip_override_q is not None
+            and self._tip_override_frame == self.current_frame
+        ):
+            display_q = self._tip_override_q
+        self.robot.update(display_q)
+
+    def clear_tip_ik_override(self, *, render=True, notify=True):
+        """Restore the recorded pose for the current frame, if one is known."""
+
+        self.end_tip_drag()
+        self._tip_override_q = None
+        self._tip_override_frame = None
+        if self._nominal_robot_q is not None and hasattr(self, "robot"):
+            self.robot.update(self._nominal_robot_q)
+        if hasattr(self, "robot"):
+            self.robot.set_tip_handle_error(False)
+        if notify and self._tip_ik_enabled:
+            self._emit_tip_ik_status("ready", "Recorded frame pose restored")
+        self.renderer.ResetCameraClippingRange()
+        if render:
+            self.render()
 
     def _apply_transform_delta(self, group, delta):
         self._set_transform_pose(group, np.asarray(delta) @ self._transform_poses[group])
@@ -624,6 +839,7 @@ class WeldingPVSceneBase:
     def reset_object_transforms(self, *, render=True):
         for group in tuple(self._transform_poses):
             self._set_transform_pose(group, np.eye(4))
+        self.clear_tip_ik_override(render=False)
         self.select_transform_group(None, render=False)
         self.renderer.ResetCameraClippingRange()
         if render:
@@ -853,7 +1069,10 @@ class WeldingPVSceneBase:
     def set_frame(self, index, *, render=True):
         if self.closed:
             return self.caption
-        self.current_frame = max(0, min(int(index), self.frame_count - 1))
+        next_frame = max(0, min(int(index), self.frame_count - 1))
+        if next_frame != self.current_frame:
+            self.clear_tip_ik_override(render=False)
+        self.current_frame = next_frame
         self._update_frame(self.current_frame)
         self._apply_visibility()
         self._update_selection_outline()
@@ -964,13 +1183,16 @@ class WeldingPVSceneBase:
     def close(self):
         if self.closed:
             return
-        self.pause()
-        self.closed = True
-        self._transform_start_callback = None
         if self._interaction_style is not None:
             self._interaction_style.detach()
             self._interaction_style = None
+        self._tip_ik_status_callback = None
+        self.enable_tip_ik(False, render=False)
+        self.closed = True
+        self._transform_start_callback = None
         self._interaction_picker.InitializePickList()
+        self._prop_interaction_target.clear()
+        self._prop_transform_group.clear()
         if getattr(self, "renderer", None) is not None:
             self.renderer.RemoveAllViewProps()
         if getattr(self, "plotter", None) is not None:
@@ -983,6 +1205,10 @@ class RobotRig:
     def __init__(self, scene, arm, layer="robot"):
         self.scene, self.arm = scene, arm
         self.links, self.joints = [], []
+        self.current_q = None
+        self.tip_position_mm = None
+        self.tip_rotation = None
+        self.tip_handle_enabled = False
         base_line = vtk.vtkLineSource()
         base_line.SetPoint1(0.0, 0.0, -30.0)
         base_line.SetPoint2(0.0, 0.0, 0.0)
@@ -1015,9 +1241,47 @@ class RobotRig:
         self.gun.SetResolution(32)
         self.gun_record, _ = scene.add_surface(self.gun, layer, color="#c0392b")
 
+        self.tip_handle = vtk.vtkSphereSource()
+        self.tip_handle.SetRadius(16.0)
+        self.tip_handle.SetThetaResolution(28)
+        self.tip_handle.SetPhiResolution(20)
+        self.tip_handle_record, _ = scene.add_surface(
+            self.tip_handle,
+            "ik_handle",
+            color="#f59e0b",
+            opacity=0.96,
+            transform_group="robot",
+            pickable=False,
+        )
+        self.tip_handle_record["prop"].GetProperty().SetAmbient(0.55)
+        scene.set_record_enabled(self.tip_handle_record, False)
+
+    def set_tip_handle_enabled(self, enabled):
+        enabled = bool(enabled)
+        if enabled == self.tip_handle_enabled:
+            return
+        self.tip_handle_enabled = enabled
+        prop = self.tip_handle_record["prop"]
+        self.scene.set_record_enabled(self.tip_handle_record, enabled)
+        self.scene.set_prop_interaction_target(
+            prop,
+            "tip",
+            self.tip_handle_record["transform_group"],
+            enabled=enabled,
+        )
+        if enabled:
+            self.set_tip_handle_error(False)
+
+    def set_tip_handle_error(self, failed):
+        color = "#d1242f" if failed else "#f59e0b"
+        self.tip_handle_record["prop"].GetProperty().SetColor(*_rgb(color))
+
     def update(self, q):
-        origins, _, rotation = self.arm._kin(q)
+        self.current_q = np.asarray(q, dtype=float).copy()
+        origins, _, rotation = self.arm._kin(self.current_q)
         origins = origins * 1e3
+        self.tip_position_mm = origins[6].copy()
+        self.tip_rotation = np.asarray(rotation, dtype=float).copy()
         tool_z = rotation[:, 2]
         ends = origins.copy()
         ends[6] = origins[6] - tool_z * 50.0
@@ -1032,6 +1296,7 @@ class RobotRig:
             record["prop"].SetPosition(*origins[index])
         self.gun.SetCenter(*(origins[6] - tool_z * 27.5))
         self.gun.SetDirection(*tool_z)
+        self.tip_handle.SetCenter(*origins[6])
 
 
 class PolylineRig:
@@ -1182,7 +1447,7 @@ class RobotPVScene(WeldingPVSceneBase):
 
     def _update_frame(self, index):
         t_now = float(self.frame_times[index])
-        self.robot.update(self.context.q_at(t_now))
+        self._update_robot_pose(self.context.q_at(t_now))
         if self.grow_trace:
             mask = self.context.t_trace <= t_now
             points = self.context.tip[mask] * 1e3 + [0, 0, 0.3]
@@ -1324,7 +1589,7 @@ class CompositePVScene(WeldingPVSceneBase):
             self.vtk_arrays[field].Modified()
         self.grid.GetPointData().Modified()
         self.grid.Modified()
-        self.robot.update(self.context.q_at(t_now))
+        self._update_robot_pose(self.context.q_at(t_now))
         mask = self.context.t_trace <= t_now
         self.trace.update(self.context.tip[mask] * 1e3 + [0, 0, 0.3])
         self._update_caption(t_now)
@@ -1430,7 +1695,7 @@ class SeamPVScene(WeldingPVSceneBase):
             vtk_array.Modified()
         self.grid.GetPointData().Modified()
         self.grid.Modified()
-        self.robot.update(self.context.q_at(t_now))
+        self._update_robot_pose(self.context.q_at(t_now))
         mask = self.context.t_trace <= t_now
         self.trace.update(self.context.tip[mask] * 1e3 + [0, 0, 0.3])
         self.time_text["prop"].SetInput(f"t = {t_now:.2f} s")
@@ -1452,28 +1717,45 @@ class PyVistaWidgetApp:
         frame_ms=125,
         lim=300.0,
         step=10.0,
+        enable_tip_ik=False,
     ):
         self.scene = scene
         self.layers = tuple(layers)
         self.store = store
         self.scene_name = scene_name
         self.closed = False
+        self.tip_ik_enabled = bool(enable_tip_ik)
         self._callbacks = []
+        self.tip_ik_status = widgets.HTML(
+            layout=widgets.Layout(width="100%", min_height="22px")
+        )
         try:
+            if self.tip_ik_enabled:
+                scene.set_tip_ik_status_callback(self._set_tip_ik_status)
+                scene.enable_tip_ik(True, render=False)
             self.viewer = scene.plotter.show(
                 jupyter_backend="server",
                 return_viewer=True,
                 window_size=scene.render_window.GetSize(),
                 jupyter_kwargs={"add_menu": True, "collapse_menu": True},
             )
+        except Exception:
+            scene.set_tip_ik_status_callback(None)
+            scene.enable_tip_ik(False, render=False)
+            raise
         finally:
             restore_std_streams()
         self.viewer.layout = widgets.Layout(width="100%", height=f"{int(height)}px")
+        tip_help = (
+            " TCP: left-drag orange handle for Mink IK."
+            if self.tip_ik_enabled
+            else ""
+        )
         self.title = widgets.HTML(
             f"<h4 style='margin:4px 0'>{title}</h4>"
             "<span style='color:#4b5563'>Camera: drag orbit · middle-drag pan · "
             "right-drag/wheel zoom. Objects: click select · Shift+left-drag "
-            "translate · Ctrl+left-drag rotate.</span>"
+            f"translate · Ctrl+left-drag rotate.{tip_help}</span>"
         )
         self.caption = widgets.HTML()
         self._build_frame_controls(frame_ms)
@@ -1485,6 +1767,8 @@ class PyVistaWidgetApp:
         self.reset_objects.on_click(self._reset_objects)
         self.scene.set_transform_start_callback(self._pause_for_object_drag)
         rows = [self.title]
+        if self.tip_ik_enabled:
+            rows.append(self.tip_ik_status)
         if self.play is not None:
             rows.append(widgets.HBox((self.play, self.frame_slider, self.caption)))
         else:
@@ -1527,6 +1811,7 @@ class PyVistaWidgetApp:
         )
         self.frame_link = widgets.jslink((self.play, "value"), (self.frame_slider, "value"))
         self.frame_slider.observe(self._update_frame, names="value")
+        self.play.observe(self._playback_changed, names="playing")
 
     def _build_layer_controls(self):
         self.layer_controls = []
@@ -1581,6 +1866,23 @@ class PyVistaWidgetApp:
             )
         self.caption.value = self.scene.caption
 
+    def _playback_changed(self, change):
+        if self.closed or not bool(change["new"]):
+            return
+        self.scene.clear_tip_ik_override()
+
+    def _set_tip_ik_status(self, level, message):
+        colors = {
+            "ready": "#57606a",
+            "active": "#9a6700",
+            "ok": "#1a7f37",
+            "error": "#cf222e",
+        }
+        color = colors.get(str(level), colors["ready"])
+        self.tip_ik_status.value = (
+            f"<span style='color:{color}'>{escape(str(message))}</span>"
+        )
+
     def _apply_view(self, _change=None):
         if self.closed:
             return
@@ -1609,8 +1911,12 @@ class PyVistaWidgetApp:
             return
         self.closed = True
         self.scene.set_transform_start_callback(None)
+        self.scene.set_tip_ik_status_callback(None)
+        if self.tip_ik_enabled:
+            self.scene.enable_tip_ik(False, render=False)
         if self.frame_slider is not None:
             self.frame_slider.unobserve(self._update_frame, names="value")
+            self.play.unobserve(self._playback_changed, names="playing")
         for control, callback in self._callbacks:
             try:
                 control.unobserve(callback, names="value")
