@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """持久化视图控件 (源自 robot6_weave_interactive_demo).
 
 - :class:`WidgetStore` — 把任意 ipywidget 的值持久化到 JSON 文件,
@@ -18,8 +17,8 @@
 import json
 from pathlib import Path
 
-import numpy as np
 import ipywidgets as widgets
+import numpy as np
 
 #: :func:`view_widgets` 返回滑块的参数名顺序
 VIEW_KEYS = ('px', 'py', 'pz', 'az', 'el', 'roll', 'fg_t')
@@ -35,8 +34,18 @@ class WidgetStore:
         self.path = Path(path)
         try:
             self._state = json.loads(self.path.read_text())
-        except Exception:
+        except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
             self._state = {}
+
+    def get(self, scene, name, default=None):
+        """Return one persisted value without creating a widget."""
+        return self._state.get(scene, {}).get(name, default)
+
+    def set(self, scene, name, value):
+        """Persist one value immediately (used by live animation frames)."""
+        self._state.setdefault(scene, {})[name] = value
+        self.path.write_text(json.dumps(self._state, indent=1,
+                                        ensure_ascii=False))
 
     def tracked(self, scene, name, w):
         val = self._state.get(scene, {}).get(name)
@@ -44,9 +53,7 @@ class WidgetStore:
             w.value = val
 
         def _save(change):
-            self._state.setdefault(scene, {})[name] = change['new']
-            self.path.write_text(json.dumps(self._state, indent=1,
-                                            ensure_ascii=False))
+            self.set(scene, name, change['new'])
 
         w.observe(_save, 'value')
         return w
@@ -59,8 +66,11 @@ def view_widgets(store, scene, lim=300.0, step=10.0, alpha_label='臂透明 [%]'
     实现为**整组不加入场景** (半透明 actor 仍参与深度混合, 只有不画才
     保证零遮挡)。
     """
-    kw = dict(continuous_update=False, readout_format='.0f',
-              layout=widgets.Layout(width='230px'))
+    kw = {
+        'continuous_update': False,
+        'readout_format': '.0f',
+        'layout': widgets.Layout(width='230px'),
+    }
     pans = [store.tracked(scene, f'p{ax}',
                           widgets.FloatSlider(min=-lim, max=lim, step=step,
                                               value=0.0,
