@@ -18,6 +18,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pymongo>=4.17.0",
     "pyvista>=0.48.4",
+    "mink>=1.2.0",
 ]
 
 [project.optional-dependencies]
