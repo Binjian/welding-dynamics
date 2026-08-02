@@ -1,3 +1,6 @@
 [submodule "vendor/trame-rtx-widget"]
 	path = vendor/trame-rtx-widget
 	url = git@gitlab.com:siasunx1/trame-rtx-widget.git
+[submodule "vendor/pyroki"]
+	path = vendor/pyroki
+	url = git@github.com:chungmin99/pyroki.git
